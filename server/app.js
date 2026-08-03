@@ -28,10 +28,10 @@ app.use("/api/meta", function(req, res) {
 });
 app.use("/api", auth.requireLogin, loginRecords);
 app.use("/api", auth.requireLogin, users);
-app.use(express.static(path.join(__dirname, "..", "client", "public")));
+app.use(express.static(path.join(__dirname, "client", "public")));
 
 app.get("*", function(req, res) {
-  res.sendFile(path.join(__dirname, "..", "client", "public", "index.html"));
+  res.sendFile(path.join(__dirname, "client", "public", "index.html"));
 });
 
 app.use(function(err, req, res, next) {
@@ -40,3 +40,7 @@ app.use(function(err, req, res, next) {
 });
 
 module.exports = app;
+
+if (require.main === module) {
+  require("./bin/www");
+}

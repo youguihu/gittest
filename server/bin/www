@@ -19,7 +19,7 @@ function normalizePort(value) {
 
 function startUp(ret) {
   var serverConfig = ret.server || {};
-  var port = normalizePort(process.env.PORT || serverConfig.port || "3000");
+  var port = normalizePort(process.env.HTTP_PORT || process.env.PORT || serverConfig.port || "3000");
   var ip = process.env.HTTP_IP || (process.env.TAF_CONFIG ? "0.0.0.0" : serverConfig.ip) || "127.0.0.1";
 
   db.init(ret.db || {});
@@ -69,6 +69,10 @@ process.on("uncaughtException", function(err) {
 
 process.on("unhandledRejection", function(err) {
   logger.error.error("unhandledRejection: " + (err && err.stack ? err.stack : String(err)));
+});
+
+process.on("message", function(obj) {
+  logger.data.debug("tafnode message: " + JSON.stringify(obj));
 });
 
 config.loadConfig("TradeLogQueryServer.conf", "c").then(startUp, function(err) {
