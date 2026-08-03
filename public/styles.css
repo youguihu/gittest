@@ -47,6 +47,8 @@ select {
 }
 
 .topbar {
+  width: calc(100% + 8px);
+  margin-left: -4px;
   padding: 5px 8px 5px 2px;
   background:
     linear-gradient(135deg, rgba(229, 241, 255, 0.96), rgba(8, 120, 188, 0.42)),
@@ -84,8 +86,8 @@ select {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  width: 159px;
-  height: 128px;
+  width: 224px;
+  height: 180px;
   margin-left: 6px;
   padding: 0;
   border: 0;
@@ -96,8 +98,8 @@ select {
 }
 
 .brand-image {
-  width: 159px;
-  height: 128px;
+  width: 224px;
+  height: 180px;
   border-radius: 0;
   object-fit: contain;
   background: transparent;
@@ -125,13 +127,14 @@ h1 {
 
 #system-name {
   font-family: "STXingkai", "KaiTi", "STKaiti", "SimSun", serif;
-  font-weight: 700;
-  font-size: 42px;
+  font-weight: 900;
+  font-size: 60px;
   letter-spacing: 2px;
-  background: linear-gradient(135deg, #0b4a8f 0%, #0878bc 55%, #4f46e5 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #102a4c;
+  background: none;
+  -webkit-text-fill-color: initial;
+  -webkit-background-clip: initial;
+  background-clip: initial;
 }
 
 h2 {
@@ -218,11 +221,20 @@ p {
 .login-page {
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 20% 15%, rgba(79, 70, 229, 0.28), transparent 55%),
-    radial-gradient(ellipse at 85% 80%, rgba(8, 120, 188, 0.3), transparent 55%),
-    radial-gradient(ellipse at 70% 20%, rgba(192, 57, 43, 0.16), transparent 45%),
-    linear-gradient(160deg, #0b1f3a 0%, #12305e 45%, #0a4b8f 100%);
+    radial-gradient(ellipse at 20% 15%, rgba(79, 70, 229, 0.22), transparent 55%),
+    radial-gradient(ellipse at 85% 80%, rgba(8, 120, 188, 0.24), transparent 55%),
+    radial-gradient(ellipse at 70% 20%, rgba(192, 57, 43, 0.12), transparent 45%),
+    linear-gradient(160deg, #1a3554 0%, #1d4570 45%, #1668a8 100%);
   animation: loginBgShift 18s ease-in-out infinite alternate;
+}
+
+.login-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
 }
 
 @keyframes loginBgShift {
@@ -317,14 +329,10 @@ p {
   gap: 14px;
   width: min(420px, 100%);
   padding: 32px 30px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: transparent;
+  border: 0;
   border-radius: 16px;
-  box-shadow:
-    0 24px 64px rgba(0, 10, 30, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow: none;
   animation: panelPop 0.6s cubic-bezier(0.22, 1.2, 0.36, 1);
 }
 
@@ -341,7 +349,7 @@ p {
 
 .login-panel h1 {
   margin: 0 0 4px;
-  font-size: 28px;
+  font-size: 36px;
   font-weight: 700;
   text-align: center;
   background: linear-gradient(120deg, #0b4a8f, #4f46e5 55%, #0878bc);
@@ -385,9 +393,21 @@ p {
   100% { left: 130%; }
 }
 
+.login-panel label {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+}
+
 .login-panel input {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #102a4c;
+  font-size: 15px;
   transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.login-panel input::placeholder {
+  color: rgba(16, 42, 76, 0.45);
 }
 
 .login-panel input:focus {
@@ -512,7 +532,7 @@ table {
 
 th,
 td {
-  padding: 12px 14px;
+  padding: 14px 20px;
   border-bottom: 1px solid #e5eaf1;
   text-align: left;
 }

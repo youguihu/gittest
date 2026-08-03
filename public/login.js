@@ -51,6 +51,11 @@ loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const payload = Object.fromEntries(new FormData(loginForm).entries());
 
+  const submitButton = loginForm.querySelector('button[type="submit"]');
+  const originalText = submitButton.textContent;
+  submitButton.disabled = true;
+  submitButton.textContent = "登 录 中 ..";
+
   try {
     await requestJson("/api/auth/login", {
       method: "POST",
@@ -59,6 +64,8 @@ loginForm.addEventListener("submit", async (event) => {
     });
     location.replace("/");
   } catch (error) {
+    submitButton.disabled = false;
+    submitButton.textContent = originalText;
     showError(error.message || "登录失败，请检查用户名和密码");
   }
 });
