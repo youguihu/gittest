@@ -1,11 +1,11 @@
 {
-  "name": "node-fullstack-db-demo",
+  "name": "tradelogqueryserver",
   "version": "1.0.0",
-  "description": "TAF.js style single-service frontend, backend API, and database demo.",
+  "description": "交易日志查询服务：多库分表查询柜台登录记录，含前端查询界面与后端 API。",
   "scripts": {
-    "start": "node ./bin/www",
-    "dev": "node --watch ./bin/www",
-    "seed": "node ./scripts/seed-trade-log.js"
+    "start": "node ./server/bin/www",
+    "dev": "node --watch ./server/bin/www",
+    "seed": "node ./server/scripts/seed-trade-log.js"
   },
   "engines": {
     "node": ">=24"

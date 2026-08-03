@@ -6,7 +6,7 @@ var mysql = require("mysql2/promise");
 
 var tableCount = Math.max(parseInt(process.env.TABLE_COUNT || "5", 10) || 5, 1);
 var rowsPerTable = Math.max(parseInt(process.env.ROWS_PER_TABLE || "5000", 10) || 5000, 1000);
-var confPath = path.resolve(__dirname, "..", "ATMngWebServer.conf");
+var confPath = path.resolve(__dirname, "..", "TradeLogQueryServer.conf");
 
 var config;
 try {
@@ -172,7 +172,7 @@ function escapeId(name) {
   return "`" + name.replace(/`/g, "``") + "`";
 }
 
-config.loadConfig("ATMngWebServer.conf", "c").then(async function(ret) {
+  config.loadConfig("TradeLogQueryServer.conf", "c").then(async function(ret) {
   var dbConfig = ret.db || {};
   var namesRaw = String(dbConfig.names || "").trim();
   var entries = namesRaw.split(",").map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });

@@ -57,7 +57,7 @@ function startUp(ret) {
   server.on("listening", function() {
     logger.data.debug("App running at http://" + ip + ":" + port);
     console.log("App running at http://localhost:" + port);
-    console.log("Config file: " + path.join(__dirname, "../ATMngWebServer.conf"));
+    console.log("Config file: " + path.join(__dirname, "../TradeLogQueryServer.conf"));
     console.log("Databases: " + db.names().join(", "));
   });
 }
@@ -70,7 +70,7 @@ process.on("unhandledRejection", function(err) {
   logger.error.error("unhandledRejection: " + (err && err.stack ? err.stack : String(err)));
 });
 
-config.loadConfig("ATMngWebServer.conf", "c").then(startUp, function(err) {
+config.loadConfig("TradeLogQueryServer.conf", "c").then(startUp, function(err) {
   logger.error.error("load config failed: " + (err && err.stack ? err.stack : String(err)));
   process.exit(1);
 }).done();
