@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "交易日志查询服务：多库分表查询柜台登录记录，含前端查询界面与后端 API。",
   "scripts": {
-    "start": "node ./server/bin/www",
-    "dev": "node --watch ./server/bin/www",
+    "start": "node ./bin/www",
+    "dev": "node --watch ./bin/www",
     "seed": "node ./server/scripts/seed-trade-log.js"
   },
   "engines": {
