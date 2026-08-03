@@ -15,14 +15,12 @@ var SELECT_COLS = [
 ];
 
 var FILTER_MAP = {
-  username: { col: "user_id", exact: false },
-  user_id:  { col: "user_id", exact: false },
-  ip:       { col: "ip",      exact: false },
-  mobile:   { col: "mobile_no", exact: false },
-  mobile_no: { col: "mobile_no", exact: false },
-  version:  { col: "version", exact: false },
-  os_version: { col: "os_version", exact: false },
+  username: { col: "user_id", exact: true },
+  user_id:  { col: "user_id", exact: true },
+  mobile:   { col: "mobile_no", exact: true },
+  mobile_no: { col: "mobile_no", exact: true },
   processing_stage: { col: "processing_stage", exact: false },
+  name:     { col: "name",   exact: false },
   module_name: { col: "module_name", exact: false },
   req_uri:  { col: "req_uri",  exact: false },
   log_lvl:  { col: "log_lvl",  exact: false },
@@ -57,6 +55,15 @@ function tableNameFromDate(date) {
     prefix = "TBL_TRADE_LOG_";
   }
   return prefix + date.replace(/-/g, "");
+}
+
+// 这三个索引字段任一有值即可免除日期必填和 31 天上限
+function hasIndexFilter(req) {
+  var keys = ["username", "user_id", "mobile", "mobile_no", "name"];
+  for (var i = 0; i < keys.length; i += 1) {
+    if (String(req.query[keys[i]] || "").trim()) return true;
+  }
+  return false;
 }
 
 function buildWhere(req) {
@@ -105,22 +112,32 @@ function rowSort(a, b) {
 
 router.get("/login-records", async function(req, res, next) {
   try {
+    var indexFilterPresent = hasIndexFilter(req);
     var startDate = parseDate(req.query.startDate || req.query.date);
     var endDate = parseDate(req.query.endDate || req.query.date);
 
-    if (!startDate || !endDate) {
-      res.status(400).json({ error: "请选择正确的开始日期和结束日期" });
+    // 无索引筛选时，日期范围为必填
+    if (!indexFilterPresent && (!startDate || !endDate)) {
+      res.status(400).json({ error: "请选择正确的开始日期和结束日期（按天分表查询需明确日期范围；若不指定日期，请通过用户ID/手机号/名称等索引筛选）" });
       return;
     }
-    if (startDate > endDate) {
+    if (startDate && endDate && startDate > endDate) {
       res.status(400).json({ error: "开始日期不能晚于结束日期" });
       return;
     }
 
-    var dayCount = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
-    if (dayCount > 31) {
-      res.status(400).json({ error: "日期区间不能超过 31 天" });
-      return;
+    // 最大日期跨度仅在无索引筛选时生效，默认 7 天，可通过 conf 的 tradeLog.maxDaySpan 修改
+    var maxDaySpan = 7;
+    if (global.CONFIG && global.CONFIG.tradeLog && global.CONFIG.tradeLog.maxDaySpan) {
+      var confSpan = parseInt(global.CONFIG.tradeLog.maxDaySpan, 10);
+      if (!Number.isNaN(confSpan) && confSpan > 0) maxDaySpan = confSpan;
+    }
+    if (!indexFilterPresent && startDate && endDate) {
+      var dayCount = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+      if (dayCount > maxDaySpan) {
+        res.status(400).json({ error: "日期区间不能超过 " + maxDaySpan + " 天（按天分表查询，跨度过大会扫描过多分表，影响性能；请缩小范围，或通过用户ID/手机号/名称等索引筛选以解除日期限制）" });
+        return;
+      }
     }
 
     var page = Math.max(parseInt(req.query.page || "1", 10) || 1, 1);
@@ -131,10 +148,12 @@ router.get("/login-records", async function(req, res, next) {
 
     var databaseNames = db.names();
     var dateList = [];
-    var current = new Date(startDate.getTime());
-    while (current <= endDate) {
-      dateList.push(formatDate(current));
-      current = new Date(current.getTime() + 86400000);
+    if (startDate && endDate) {
+      var current = new Date(startDate.getTime());
+      while (current <= endDate) {
+        dateList.push(formatDate(current));
+        current = new Date(current.getTime() + 86400000);
+      }
     }
 
     var tablePrefix = "";
@@ -157,24 +176,45 @@ router.get("/login-records", async function(req, res, next) {
 
     var dbResults = await Promise.all(databaseNames.map(async function(dbName) {
       try {
-        var placeholders = tableNamesByDate.map(function() { return "?"; }).join(",");
-        var rows = await db.query(dbName,
-          "SELECT table_name AS t FROM information_schema.tables " +
-          "WHERE table_schema = DATABASE() AND table_name IN (" + placeholders + ")",
-          tableNamesByDate
-        );
-        var existingSet = new Set(rows.map(function(r) { return r.t; }));
+        var rows;
+        if (dateList.length > 0) {
+          var placeholders = tableNamesByDate.map(function() { return "?"; }).join(",");
+          rows = await db.query(dbName,
+            "SELECT table_name AS t FROM information_schema.tables " +
+            "WHERE table_schema = DATABASE() AND table_name IN (" + placeholders + ")",
+            tableNamesByDate
+          );
+        } else {
+          // userId 筛选且未指定日期：查询所有匹配前缀的表
+          rows = await db.query(dbName,
+            "SELECT table_name AS t FROM information_schema.tables " +
+            "WHERE table_schema = DATABASE() AND table_name LIKE ?",
+            [tablePrefix + "%"]
+          );
+        }
+        var existingTables = rows.map(function(r) { return r.t; });
         var dbFound = [];
         var dbMissing = [];
-        dateList.forEach(function(d) {
-          var t = dateToTable[d];
-          var item = { db: dbName, table: t, date: d };
-          if (existingSet.has(t)) {
-            dbFound.push(item);
-          } else {
-            dbMissing.push(item);
-          }
-        });
+        if (dateList.length > 0) {
+          dateList.forEach(function(d) {
+            var t = dateToTable[d];
+            var item = { db: dbName, table: t, date: d };
+            if (existingTables.indexOf(t) >= 0) {
+              dbFound.push(item);
+            } else {
+              dbMissing.push(item);
+            }
+          });
+        } else {
+          existingTables.forEach(function(t) {
+            var suffix = t.indexOf(tablePrefix) === 0 ? t.slice(tablePrefix.length) : "";
+            var formatted = "";
+            if (/^\d{8}$/.test(suffix)) {
+              formatted = suffix.slice(0, 4) + "-" + suffix.slice(4, 6) + "-" + suffix.slice(6, 8);
+            }
+            dbFound.push({ db: dbName, table: t, date: formatted });
+          });
+        }
         return { dbName: dbName, found: dbFound, missing: dbMissing, error: null };
       } catch (err) {
         return { dbName: dbName, found: [], missing: [], error: String(err.message || err) };
@@ -257,8 +297,8 @@ router.get("/login-records", async function(req, res, next) {
       missingTables: missing.map(function(p) { return { db: p.db, table: p.table }; }),
       failedDbs: failedDbs,
       range: {
-        startDate: formatDate(startDate),
-        endDate: formatDate(endDate)
+        startDate: startDate ? formatDate(startDate) : "",
+        endDate: endDate ? formatDate(endDate) : ""
       }
     });
   } catch (err) {

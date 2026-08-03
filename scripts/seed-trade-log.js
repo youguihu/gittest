@@ -1,6 +1,47 @@
 "use strict";
 
 var path = require("path");
+var fs = require("fs");
+var Module = require("module");
+
+// 运行时解析 NODE_PATH 以定位 @taf 模块
+if (!process.env.NODE_PATH) {
+  var projectRoot = path.join(__dirname, "..");
+  var resolved = "";
+  // 1. 向上查找
+  var dir = projectRoot;
+  while (true) {
+    var candidate = path.join(dir, "node_modules");
+    if (fs.existsSync(path.join(candidate, "@taf"))) {
+      resolved = candidate;
+      break;
+    }
+    var parent = path.dirname(dir);
+    if (parent === dir) { break; }
+    dir = parent;
+  }
+  // 2. 在兄弟目录中查找
+  if (!resolved) {
+    var parentDir = path.dirname(projectRoot);
+    try {
+      var siblings = fs.readdirSync(parentDir);
+      for (var i = 0; i < siblings.length; i += 1) {
+        var siblingNM = path.join(parentDir, siblings[i], "node_modules");
+        if (fs.existsSync(path.join(siblingNM, "@taf"))) {
+          resolved = siblingNM;
+          break;
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+  // 3. 回退到项目自身的 node_modules
+  if (!resolved) {
+    resolved = path.join(projectRoot, "node_modules");
+  }
+  process.env.NODE_PATH = resolved;
+  Module._initPaths();
+}
+
 var mysql = require("mysql2/promise");
 
 var tableCount = Math.max(parseInt(process.env.TABLE_COUNT || "5", 10) || 5, 1);
@@ -12,8 +53,8 @@ try {
   config = require("../lib/config");
   var Q = require("q");
 } catch (e) {
-  console.error("请通过 NODE_PATH 设置指向 @taf 模块的路径后再运行");
-  console.error("例如: NODE_PATH=/path/to/ATMngWebServer/node_modules npm run seed");
+  console.error("无法找到 @taf 模块，请确保 node_modules 中已安装 @taf 相关依赖");
+  console.error("或手动设置 NODE_PATH 环境变量指向包含 @taf 的 node_modules 目录");
   process.exit(1);
 }
 

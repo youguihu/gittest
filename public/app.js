@@ -56,6 +56,7 @@ function appendCell(row, value) {
   const cell = document.createElement("td");
   cell.textContent = value != null ? value : "";
   row.appendChild(cell);
+  return cell;
 }
 
 function roleText(role) {
@@ -104,14 +105,15 @@ async function requestJson(url, options = {}) {
 function setupUser(user) {
   activeUser = user;
   currentUser.textContent = `${user.display_name}（${user.username} / ${roleText(user.role)}）`;
-  usersTab.hidden = user.role !== "admin";
+  // 用户管理 UI 已隐藏，统一用 admin 用户
+  if (usersTab) usersTab.hidden = user.role !== "admin";
 }
 
 function showLoginRecords() {
   loginRecordsView.hidden = false;
-  usersView.hidden = true;
-  loginRecordsTab.classList.add("is-active");
-  usersTab.classList.remove("is-active");
+  if (usersView) usersView.hidden = true;
+  if (loginRecordsTab) loginRecordsTab.classList.add("is-active");
+  if (usersTab) usersTab.classList.remove("is-active");
 }
 
 function updatePager(pagination) {
@@ -124,9 +126,9 @@ function updatePager(pagination) {
 
 async function showUsers() {
   loginRecordsView.hidden = true;
-  usersView.hidden = false;
-  loginRecordsTab.classList.remove("is-active");
-  usersTab.classList.add("is-active");
+  if (usersView) usersView.hidden = false;
+  if (loginRecordsTab) loginRecordsTab.classList.remove("is-active");
+  if (usersTab) usersTab.classList.add("is-active");
   await loadUsers();
 }
 
@@ -137,36 +139,101 @@ function renderLoginRecords(records, result) {
   const failedDbs = result.failedDbs || [];
   var failMsg = failedDbs.length > 0 ? `；失败库 ${failedDbs.length}（${failedDbs.join(", ")}）` : "";
   updatePager(result.pagination);
+  var rangeText = result.range.startDate && result.range.endDate
+    ? `查询 ${result.range.startDate} 至 ${result.range.endDate}`
+    : "查询全部日期";
   setMessage(recordMessage,
-    `查询 ${result.range.startDate} 至 ${result.range.endDate}，命中 ${tableCount} 张表，缺失 ${missingCount} 张${failMsg}`,
+    `${rangeText}，命中 ${tableCount} 张表，缺失 ${missingCount} 张${failMsg}`,
     "success"
   );
 
   if (records.length === 0) {
-    recordsTableBody.innerHTML = '<tr><td colspan="11" class="empty">没有查询到交易日志</td></tr>';
+    recordsTableBody.innerHTML = '<tr><td colspan="10" class="empty">没有查询到交易日志</td></tr>';
     return;
   }
 
   records.forEach((record) => {
     const row = document.createElement("tr");
-    appendCell(row, record.id);
-    appendCell(row, record.source_db);
-    appendCell(row, record.source_table);
-    appendCell(row, record.log_date);
-    appendCell(row, record.user_id);
-    appendCell(row, record.ip);
+    appendCell(row, record.name).classList.add("col-primary");
+    appendCell(row, record.user_id).classList.add("col-primary");
+    appendCell(row, record.mobile_no).classList.add("col-primary");
     const resultCell = document.createElement("td");
+    resultCell.classList.add("col-primary");
     const badge = document.createElement("span");
     badge.className = `badge ${succBadgeClass(record.succ)}`;
     badge.textContent = succText(record.succ);
     resultCell.appendChild(badge);
     row.appendChild(resultCell);
-    appendCell(row, record.version);
-    appendCell(row, record.processing_stage);
-    appendCell(row, record.time_consuming != null ? record.time_consuming : "");
+    appendCell(row, record.processing_stage).classList.add("col-primary");
+    appendCell(row, record.log_date).classList.add("col-primary");
     appendCell(row, record.req_uri);
+    appendCell(row, record.time_consuming != null ? record.time_consuming : "");
+    appendCell(row, record.source_db).classList.add("col-secondary");
+    // 详情按钮
+    const actionCell = document.createElement("td");
+    actionCell.classList.add("col-action");
+    const detailBtn = document.createElement("button");
+    detailBtn.type = "button";
+    detailBtn.className = "link-btn";
+    detailBtn.textContent = "详情";
+    detailBtn.addEventListener("click", () => showRecordDetail(record));
+    actionCell.appendChild(detailBtn);
+    row.appendChild(actionCell);
     recordsTableBody.appendChild(row);
   });
+}
+
+function showRecordDetail(record) {
+  const detailModal = document.querySelector("#detail-modal");
+  const detailBody = document.querySelector("#detail-body");
+  const fields = [
+    ["名称", record.name],
+    ["用户 ID", record.user_id],
+    ["手机号", record.mobile_no],
+    ["结果", succText(record.succ)],
+    ["处理阶段", record.processing_stage],
+    ["日期", record.log_date],
+    ["接口号", record.req_uri],
+    ["耗时(ms)", record.time_consuming != null ? record.time_consuming : ""],
+    ["数据来源库", record.source_db],
+    ["数据来源表", record.source_table],
+    ["应用名", record.application_name],
+    ["日志级别", record.log_lvl],
+    ["毫秒时间", record.log_date_ms],
+    ["进程 ID", record.process_id],
+    ["线程 ID", record.thread_id],
+    ["模块名", record.module_name],
+    ["源码位置", record.src_location],
+    ["会话 ID", record.session_id],
+    ["流水号", record.process_number],
+    ["后端 ID", record.backend_id],
+    ["后端进程 ID", record.backend_process_id],
+    ["数据信息", record.data_info],
+    ["IMEI", record.imei],
+    ["版本", record.version],
+    ["OS 版本", record.os_version],
+    ["IMSI", record.imsi],
+    ["MAC", record.mac],
+    ["UDID", record.udid],
+    ["IP", record.ip],
+    ["设备 ID", record.mach_id],
+    ["记录 ID", record.id]
+  ];
+  detailBody.innerHTML = "";
+  fields.forEach(([label, value]) => {
+    const rowDiv = document.createElement("div");
+    rowDiv.className = "detail-row";
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "detail-label";
+    labelSpan.textContent = label;
+    const valueSpan = document.createElement("span");
+    valueSpan.className = "detail-value";
+    valueSpan.textContent = value != null ? String(value) : "";
+    rowDiv.appendChild(labelSpan);
+    rowDiv.appendChild(valueSpan);
+    detailBody.appendChild(rowDiv);
+  });
+  detailModal.hidden = false;
 }
 
 function renderUsers(users) {
@@ -204,16 +271,22 @@ logoutButton.addEventListener("click", async () => {
   redirectToLogin();
 });
 
-loginRecordsTab.addEventListener("click", async () => {
-  showLoginRecords();
-  await loadLoginRecords();
-});
+// 登录记录按钮已隐藏，事件保留以便日后恢复
+if (loginRecordsTab) {
+  loginRecordsTab.addEventListener("click", async () => {
+    showLoginRecords();
+    await loadLoginRecords();
+  });
+}
 
-usersTab.addEventListener("click", async () => {
-  if (activeUser && activeUser.role === "admin") {
-    await showUsers();
-  }
-});
+// 用户管理 UI 已隐藏，事件保留以便日后恢复
+if (usersTab) {
+  usersTab.addEventListener("click", async () => {
+    if (activeUser && activeUser.role === "admin") {
+      await showUsers();
+    }
+  });
+}
 
 recordForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -237,28 +310,43 @@ nextPageButton.addEventListener("click", async () => {
   await loadLoginRecords().catch((error) => showError(error.message || "翻页失败，请稍后重试"));
 });
 
-userForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const payload = Object.fromEntries(new FormData(userForm).entries());
+// 用户管理表单事件保留以便日后恢复
+if (userForm) {
+  userForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(userForm).entries());
 
-  try {
-    const result = await requestJson("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    userForm.reset();
-    setMessage(userMessage, `已新增用户：${result.data.username}`, "success");
-    await loadUsers();
-  } catch (error) {
-    showError(error.message || "新增用户失败，请稍后重试");
-  }
-});
+    try {
+      const result = await requestJson("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      userForm.reset();
+      setMessage(userMessage, `已新增用户：${result.data.username}`, "success");
+      await loadUsers();
+    } catch (error) {
+      showError(error.message || "新增用户失败，请稍后重试");
+    }
+  });
+}
 
 errorClose.addEventListener("click", hideError);
 errorModal.addEventListener("click", (event) => {
   if (event.target === errorModal) hideError();
 });
+
+const detailClose = document.querySelector("#detail-close");
+const detailModal = document.querySelector("#detail-modal");
+function hideDetail() {
+  detailModal.hidden = true;
+}
+if (detailClose) {
+  detailClose.addEventListener("click", hideDetail);
+  detailModal.addEventListener("click", (event) => {
+    if (event.target === detailModal) hideDetail();
+  });
+}
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !errorModal.hidden) hideError();
 });

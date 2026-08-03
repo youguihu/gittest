@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "TAF.js style single-service frontend, backend API, and database demo.",
   "scripts": {
-    "start": "NODE_PATH=/Volumes/kaixia/AICoding/code/XYZQ/ATrade/ATMngWebServer/node_modules node ./bin/www",
-    "dev": "NODE_PATH=/Volumes/kaixia/AICoding/code/XYZQ/ATrade/ATMngWebServer/node_modules node --watch ./bin/www",
-    "seed": "NODE_PATH=/Volumes/kaixia/AICoding/code/XYZQ/ATrade/ATMngWebServer/node_modules node ./scripts/seed-trade-log.js"
+    "start": "node ./bin/www",
+    "dev": "node --watch ./bin/www",
+    "seed": "node ./scripts/seed-trade-log.js"
   },
   "engines": {
     "node": ">=24"

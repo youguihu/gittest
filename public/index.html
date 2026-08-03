@@ -19,8 +19,12 @@
         </div>
         <div class="actions">
           <div class="action-buttons">
+            <!-- 登录记录按钮暂时隐藏，页面默认展示登录记录视图
             <button id="login-records-tab" class="secondary" type="button">登录记录</button>
+            -->
+            <!-- 用户管理按钮暂时隐藏，统一用 admin 用户
             <button id="users-tab" class="secondary" type="button">用户管理</button>
+            -->
             <button id="logout-button" type="button">退出</button>
           </div>
           <p id="current-user" class="current-user">正在校验登录状态</p>
@@ -31,7 +35,7 @@
         <section class="section-head">
           <div>
             <h2>查询条件</h2>
-            <p>按日期、用户、IP、结果筛选。</p>
+            <p>按日期、用户、手机号、名称等筛选。</p>
           </div>
         </section>
 
@@ -39,19 +43,27 @@
           <form id="record-form" class="grid-form records-form">
             <label>
               开始日期
-              <input id="record-start-date" name="startDate" required type="date" />
+              <input id="record-start-date" name="startDate" type="date" />
             </label>
             <label>
               结束日期
-              <input id="record-end-date" name="endDate" required type="date" />
+              <input id="record-end-date" name="endDate" type="date" />
             </label>
             <label>
               用户 ID
               <input name="user_id" placeholder="用户编号" />
             </label>
             <label>
-              IP
-              <input name="ip" placeholder="例如：10.8.1" />
+              手机号
+              <input name="mobile_no" placeholder="手机号" />
+            </label>
+            <label>
+              名称
+              <input name="name" placeholder="名称" />
+            </label>
+            <label>
+              处理阶段
+              <input name="processing_stage" placeholder="处理阶段" />
             </label>
             <label>
               结果
@@ -61,10 +73,6 @@
                 <option value="0">失败</option>
                 <option value="-1">未知</option>
               </select>
-            </label>
-            <label>
-              客户端版本
-              <input name="version" placeholder="version" />
             </label>
             <label>
               每页条数
@@ -80,17 +88,16 @@
           <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>库</th>
-                <th>表</th>
-                <th>时间</th>
-                <th>用户 ID</th>
-                <th>IP</th>
-                <th>结果</th>
-                <th>客户端</th>
-                <th>阶段</th>
+                <th class="col-primary">名称</th>
+                <th class="col-primary">用户 ID</th>
+                <th class="col-primary">手机号</th>
+                <th class="col-primary">结果</th>
+                <th class="col-primary">阶段</th>
+                <th class="col-primary">时间</th>
+                <th>接口号</th>
                 <th>耗时(ms)</th>
-                <th>URI</th>
+                <th class="col-secondary">数据来源库</th>
+                <th class="col-action">详情</th>
               </tr>
             </thead>
             <tbody id="login-records"></tbody>
@@ -104,6 +111,7 @@
         </section>
       </section>
 
+      <!-- 用户管理视图暂时隐藏，统一用 admin 用户
       <section id="users-view" hidden>
         <section class="section-head">
           <div>
@@ -153,13 +161,22 @@
           </table>
         </section>
       </section>
+      -->
     </main>
 
     <div id="error-modal" class="modal" hidden role="alertdialog" aria-modal="true" aria-labelledby="error-title">
       <div class="modal-panel">
         <h2 id="error-title">提示</h2>
         <p id="error-text"></p>
-        <button id="error-close" type="button">知道了</button>
+        <button id="error-close" type="button">确定</button>
+      </div>
+    </div>
+
+    <div id="detail-modal" class="modal detail-modal" hidden role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <div class="modal-panel detail-panel">
+        <h2 id="detail-title">记录详情</h2>
+        <div id="detail-body" class="detail-body"></div>
+        <button id="detail-close" type="button">关闭</button>
       </div>
     </div>
 

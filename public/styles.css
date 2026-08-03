@@ -250,7 +250,7 @@ button {
   border: 0;
   border-radius: 6px;
   padding: 0 18px;
-  background: var(--brand);
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
   color: #ffffff;
   cursor: pointer;
   font-weight: 600;
@@ -258,8 +258,8 @@ button {
 }
 
 button:hover {
-  background: var(--brand-dark);
-  box-shadow: 0 8px 18px var(--brand-shadow);
+  background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.3);
   transform: translateY(-1px);
 }
 
@@ -334,6 +334,57 @@ td {
 
 tbody tr:hover {
   background: #f3f8ff;
+}
+
+/* 表头层级：前 6 列重点强调，末尾次要列弱化 */
+th {
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  color: #ffffff;
+}
+
+td {
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.05), rgba(99, 102, 241, 0.015));
+}
+
+td.col-primary {
+  font-weight: 700;
+  color: #3730a3;
+}
+
+tbody tr:hover td {
+  background: #eef2ff;
+}
+
+td.col-secondary {
+  color: #8a93a4;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+th.col-action,
+td.col-action {
+  text-align: center;
+  width: 88px;
+}
+
+td.col-action button {
+  min-height: auto;
+  padding: 4px 10px;
+  font-size: 13px;
+  background: transparent;
+  color: #0ea5e9;
+  border: 0;
+  cursor: pointer;
+  font-weight: 600;
+  border-radius: 999px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+td.col-action button:hover {
+  background: #e0f2fe;
+  color: #0284c7;
+  box-shadow: none;
+  transform: none;
 }
 
 .badge {
@@ -412,6 +463,58 @@ tbody tr:hover {
 .modal-panel p {
   margin-bottom: 18px;
   color: #3f4d5f;
+}
+
+#error-close {
+  display: block;
+  margin-left: auto;
+}
+
+.detail-modal .modal-panel {
+  width: min(680px, 100%);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-modal .modal-panel h2 {
+  color: #111827;
+}
+
+.detail-body {
+  overflow-y: auto;
+  margin-bottom: 16px;
+  border: 1px solid #e5e9f0;
+  border-radius: 6px;
+}
+
+.detail-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  color: #6b7a8c;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.detail-value {
+  color: #111827;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+#detail-close {
+  display: block;
+  margin-left: auto;
 }
 
 .back-to-top {
