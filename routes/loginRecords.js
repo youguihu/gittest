@@ -118,7 +118,7 @@ router.get("/login-records", async function(req, res, next) {
 
     // 无索引筛选时，日期范围为必填
     if (!indexFilterPresent && (!startDate || !endDate)) {
-      res.status(400).json({ error: "请选择正确的开始日期和结束日期（按天分表查询需明确日期范围；若不指定日期，请通过用户ID/手机号/名称等索引筛选）" });
+      res.status(400).json({ error: "请选择正确的开始日期和结束日期（按天分表查询需明确日期范围；若不指定日期，请通过用户ID/手机号/名称等精确筛选）" });
       return;
     }
     if (startDate && endDate && startDate > endDate) {
@@ -135,7 +135,7 @@ router.get("/login-records", async function(req, res, next) {
     if (!indexFilterPresent && startDate && endDate) {
       var dayCount = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
       if (dayCount > maxDaySpan) {
-        res.status(400).json({ error: "日期区间不能超过 " + maxDaySpan + " 天（按天分表查询，跨度过大会扫描过多分表，影响性能；请缩小范围，或通过用户ID/手机号/名称等索引筛选以解除日期限制）" });
+        res.status(400).json({ error: "日期区间不能超过 " + maxDaySpan + " 天（按天分表查询，跨度过大会扫描过多分表，影响性能；请缩小范围，或通过用户ID/手机号/名称等精确筛选以解除日期限制）" });
         return;
       }
     }

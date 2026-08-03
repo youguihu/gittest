@@ -1,46 +1,6 @@
 "use strict";
 
 var path = require("path");
-var fs = require("fs");
-var Module = require("module");
-
-// 运行时解析 NODE_PATH 以定位 @taf 模块
-if (!process.env.NODE_PATH) {
-  var projectRoot = path.join(__dirname, "..");
-  var resolved = "";
-  // 1. 向上查找
-  var dir = projectRoot;
-  while (true) {
-    var candidate = path.join(dir, "node_modules");
-    if (fs.existsSync(path.join(candidate, "@taf"))) {
-      resolved = candidate;
-      break;
-    }
-    var parent = path.dirname(dir);
-    if (parent === dir) { break; }
-    dir = parent;
-  }
-  // 2. 在兄弟目录中查找
-  if (!resolved) {
-    var parentDir = path.dirname(projectRoot);
-    try {
-      var siblings = fs.readdirSync(parentDir);
-      for (var i = 0; i < siblings.length; i += 1) {
-        var siblingNM = path.join(parentDir, siblings[i], "node_modules");
-        if (fs.existsSync(path.join(siblingNM, "@taf"))) {
-          resolved = siblingNM;
-          break;
-        }
-      }
-    } catch (e) { /* ignore */ }
-  }
-  // 3. 回退到项目自身的 node_modules
-  if (!resolved) {
-    resolved = path.join(projectRoot, "node_modules");
-  }
-  process.env.NODE_PATH = resolved;
-  Module._initPaths();
-}
 
 var mysql = require("mysql2/promise");
 

@@ -6,11 +6,16 @@
     <title>系统登录</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body class="login-page">
+    <div class="login-blobs" aria-hidden="true">
+      <span class="blob blob-1"></span>
+      <span class="blob blob-2"></span>
+      <span class="blob blob-3"></span>
+      <span class="blob blob-4"></span>
+    </div>
     <main class="shell login-shell">
       <form id="login-form" class="login-panel">
         <h1>系统登录</h1>
-        <p>默认管理员账号：admin / admin123</p>
         <label>
           用户名
           <input name="username" required autocomplete="username" placeholder="admin" autofocus />

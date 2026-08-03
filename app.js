@@ -19,6 +19,13 @@ app.use(cookieParser());
 app.use(auth.attachUser);
 
 app.use("/api/auth", authRoutes);
+app.use("/api/meta", function(req, res) {
+  var systemName = "交易日志";
+  if (global.CONFIG && global.CONFIG.server && global.CONFIG.server.systemName) {
+    systemName = global.CONFIG.server.systemName;
+  }
+  res.json({ systemName: systemName });
+});
 app.use("/api", auth.requireLogin, loginRecords);
 app.use("/api", auth.requireLogin, users);
 app.use(express.static(path.join(__dirname, "public")));

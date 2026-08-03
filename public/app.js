@@ -81,6 +81,20 @@ function redirectToLogin() {
   location.replace("/login.html");
 }
 
+async function loadSystemName() {
+  try {
+    const result = await fetch("/api/meta", { credentials: "same-origin" });
+    const meta = await result.json();
+    if (meta && meta.systemName) {
+      const title = document.querySelector("#system-name");
+      if (title) title.textContent = meta.systemName;
+      document.title = meta.systemName;
+    }
+  } catch (error) {
+    // 加载失败时保留默认标题
+  }
+}
+
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
     credentials: "same-origin",
@@ -187,7 +201,7 @@ function showRecordDetail(record) {
   const detailModal = document.querySelector("#detail-modal");
   const detailBody = document.querySelector("#detail-body");
   const fields = [
-    ["名称", record.name],
+    ["姓名", record.name],
     ["用户 ID", record.user_id],
     ["手机号", record.mobile_no],
     ["结果", succText(record.succ)],
@@ -361,6 +375,7 @@ backToTop.addEventListener("click", () => {
 
 async function init() {
   try {
+    await loadSystemName();
     const result = await requestJson("/api/auth/me");
     if (!result.data) {
       redirectToLogin();
@@ -370,7 +385,7 @@ async function init() {
     recordStartDate.value = today();
     recordEndDate.value = today();
     pageInput.value = "1";
-    pageSizeInput.value = "50";
+    pageSizeInput.value = "10";
     showLoginRecords();
     await loadLoginRecords();
   } catch {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>交易日志查询</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=2" />
   </head>
   <body>
     <main class="shell">
@@ -14,20 +14,20 @@
             <img class="brand-image" src="/hualong-logo-clean.png" alt="华龙证券" />
           </div>
           <div>
-            <h1>交易日志</h1>
+            <h1 id="system-name">交易日志</h1>
           </div>
         </div>
         <div class="actions">
-          <div class="action-buttons">
-            <!-- 登录记录按钮暂时隐藏，页面默认展示登录记录视图
-            <button id="login-records-tab" class="secondary" type="button">登录记录</button>
-            -->
-            <!-- 用户管理按钮暂时隐藏，统一用 admin 用户
-            <button id="users-tab" class="secondary" type="button">用户管理</button>
-            -->
-            <button id="logout-button" type="button">退出</button>
+          <!-- 登录记录按钮暂时隐藏，页面默认展示登录记录视图
+          <button id="login-records-tab" class="secondary" type="button">登录记录</button>
+          -->
+          <!-- 用户管理按钮暂时隐藏，统一用 admin 用户
+          <button id="users-tab" class="secondary" type="button">用户管理</button>
+          -->
+          <div class="user-line">
+            <p id="current-user" class="current-user">正在校验登录状态</p>
+            <a id="logout-button" href="#" role="button">退出</a>
           </div>
-          <p id="current-user" class="current-user">正在校验登录状态</p>
         </div>
       </section>
 
@@ -35,7 +35,7 @@
         <section class="section-head">
           <div>
             <h2>查询条件</h2>
-            <p>按日期、用户、手机号、名称等筛选。</p>
+            <p>按日期筛选，或按用户id、手机号、姓名精确查询。</p>
           </div>
         </section>
 
@@ -51,15 +51,15 @@
             </label>
             <label>
               用户 ID
-              <input name="user_id" placeholder="用户编号" />
+              <input name="user_id" placeholder="用户ID，精确匹配，不支持模糊" />
             </label>
             <label>
               手机号
-              <input name="mobile_no" placeholder="手机号" />
+              <input name="mobile_no" placeholder="手机号，精确匹配，不支持模糊" />
             </label>
             <label>
-              名称
-              <input name="name" placeholder="名称" />
+              姓名
+              <input name="name" placeholder="姓名，支持模糊查询" />
             </label>
             <label>
               处理阶段
@@ -76,7 +76,7 @@
             </label>
             <label>
               每页条数
-              <input id="page-size" name="pageSize" type="number" min="1" max="200" value="50" />
+              <input id="page-size" name="pageSize" type="number" min="1" max="200" value="10" />
             </label>
             <button type="submit">查询</button>
           </form>
@@ -88,7 +88,7 @@
           <table>
             <thead>
               <tr>
-                <th class="col-primary">名称</th>
+                <th class="col-primary">姓名</th>
                 <th class="col-primary">用户 ID</th>
                 <th class="col-primary">手机号</th>
                 <th class="col-primary">结果</th>
