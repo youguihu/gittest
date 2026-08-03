@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>系统登录</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell login-shell">
+      <form id="login-form" class="login-panel">
+        <h1>系统登录</h1>
+        <p>默认管理员账号：admin / admin123</p>
+        <label>
+          用户名
+          <input name="username" required autocomplete="username" placeholder="admin" autofocus />
+        </label>
+        <label>
+          密码
+          <input name="password" required type="password" autocomplete="current-password" placeholder="admin123" />
+        </label>
+        <button type="submit">登录</button>
+        <p id="login-message" class="message" aria-live="polite"></p>
+      </form>
+    </main>
+
+    <div id="error-modal" class="modal" hidden role="alertdialog" aria-modal="true" aria-labelledby="error-title">
+      <div class="modal-panel">
+        <h2 id="error-title">提示</h2>
+        <p id="error-text"></p>
+        <button id="error-close" type="button">知道了</button>
+      </div>
+    </div>
+
+    <script src="/login.js" type="module"></script>
+  </body>
+</html>

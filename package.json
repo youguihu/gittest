@@ -1,0 +1,22 @@
+{
+  "name": "node-fullstack-db-demo",
+  "version": "1.0.0",
+  "description": "TAF.js style single-service frontend, backend API, and database demo.",
+  "scripts": {
+    "start": "NODE_PATH=/Volumes/kaixia/AICoding/code/XYZQ/ATrade/ATMngWebServer/node_modules node ./bin/www",
+    "dev": "NODE_PATH=/Volumes/kaixia/AICoding/code/XYZQ/ATrade/ATMngWebServer/node_modules node --watch ./bin/www",
+    "seed": "NODE_PATH=/Volumes/kaixia/AICoding/code/XYZQ/ATrade/ATMngWebServer/node_modules node ./scripts/seed-trade-log.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "body-parser": "^2.2.0",
+    "cookie-parser": "^1.4.7",
+    "debug": "^4.4.1",
+    "express": "^4.21.2",
+    "morgan": "^1.10.1",
+    "mysql2": "^3.23.2",
+    "q": "^1.5.1"
+  }
+}

@@ -1,0 +1,77 @@
+#!/usr/bin/env node
+"use strict";
+
+var http = require("http");
+var path = require("path");
+var app = require("../app");
+var config = require("../lib/config");
+var db = require("../lib/db");
+var logger = require("../lib/logger");
+var userStore = require("../lib/userStore");
+
+function normalizePort(value) {
+  var port = parseInt(value, 10);
+  if (isNaN(port)) {
+    return value;
+  }
+  return port >= 0 ? port : false;
+}
+
+function startUp(ret) {
+  var serverConfig = ret.server || {};
+  var port = normalizePort(process.env.PORT || serverConfig.port || "3000");
+  var ip = process.env.HTTP_IP || serverConfig.ip || "127.0.0.1";
+
+  db.init(ret.db || {});
+  db.verify().then(function(results) {
+    var allOk = results.every(function(r) { return r.ok; });
+    if (!allOk) {
+      logger.error.error("Some databases failed to connect");
+    }
+  });
+
+  userStore.init(ret);
+
+  app.set("port", port);
+  app.set("ip", ip);
+
+  var server = http.createServer(app);
+
+  server.listen(port, ip);
+  server.on("error", function(error) {
+    if (error.syscall !== "listen") {
+      throw error;
+    }
+
+    var bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
+    if (error.code === "EACCES") {
+      logger.error.error(bind + " requires elevated privileges");
+      process.exit(1);
+    }
+    if (error.code === "EADDRINUSE") {
+      logger.error.error(bind + " is already in use");
+      process.exit(1);
+    }
+    throw error;
+  });
+
+  server.on("listening", function() {
+    logger.data.debug("App running at http://" + ip + ":" + port);
+    console.log("App running at http://localhost:" + port);
+    console.log("Config file: " + path.join(__dirname, "../ATMngWebServer.conf"));
+    console.log("Databases: " + db.names().join(", "));
+  });
+}
+
+process.on("uncaughtException", function(err) {
+  logger.error.error("uncaughtException: " + (err && err.stack ? err.stack : String(err)));
+});
+
+process.on("unhandledRejection", function(err) {
+  logger.error.error("unhandledRejection: " + (err && err.stack ? err.stack : String(err)));
+});
+
+config.loadConfig("ATMngWebServer.conf", "c").then(startUp, function(err) {
+  logger.error.error("load config failed: " + (err && err.stack ? err.stack : String(err)));
+  process.exit(1);
+}).done();

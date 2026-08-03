@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>交易日志查询</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar">
+        <div class="brand-block">
+          <div class="brand-logo" aria-label="华龙证券">
+            <img class="brand-image" src="/hualong-logo-clean.png" alt="华龙证券" />
+          </div>
+          <div>
+            <h1>交易日志</h1>
+          </div>
+        </div>
+        <div class="actions">
+          <div class="action-buttons">
+            <button id="login-records-tab" class="secondary" type="button">登录记录</button>
+            <button id="users-tab" class="secondary" type="button">用户管理</button>
+            <button id="logout-button" type="button">退出</button>
+          </div>
+          <p id="current-user" class="current-user">正在校验登录状态</p>
+        </div>
+      </section>
+
+      <section id="login-records-view">
+        <section class="section-head">
+          <div>
+            <h2>查询条件</h2>
+            <p>按日期、用户、IP、结果筛选。</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <form id="record-form" class="grid-form records-form">
+            <label>
+              开始日期
+              <input id="record-start-date" name="startDate" required type="date" />
+            </label>
+            <label>
+              结束日期
+              <input id="record-end-date" name="endDate" required type="date" />
+            </label>
+            <label>
+              用户 ID
+              <input name="user_id" placeholder="用户编号" />
+            </label>
+            <label>
+              IP
+              <input name="ip" placeholder="例如：10.8.1" />
+            </label>
+            <label>
+              结果
+              <select name="succ">
+                <option value="">全部</option>
+                <option value="1">成功</option>
+                <option value="0">失败</option>
+                <option value="-1">未知</option>
+              </select>
+            </label>
+            <label>
+              客户端版本
+              <input name="version" placeholder="version" />
+            </label>
+            <label>
+              每页条数
+              <input id="page-size" name="pageSize" type="number" min="1" max="200" value="50" />
+            </label>
+            <button type="submit">查询</button>
+          </form>
+          <input id="page" name="page" type="hidden" value="1" form="record-form" />
+          <p id="record-message" class="message" aria-live="polite"></p>
+        </section>
+
+        <section class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>库</th>
+                <th>表</th>
+                <th>时间</th>
+                <th>用户 ID</th>
+                <th>IP</th>
+                <th>结果</th>
+                <th>客户端</th>
+                <th>阶段</th>
+                <th>耗时(ms)</th>
+                <th>URI</th>
+              </tr>
+            </thead>
+            <tbody id="login-records"></tbody>
+          </table>
+        </section>
+
+        <section class="pager">
+          <button id="prev-page" class="secondary" type="button">上一页</button>
+          <span id="page-info">第 1 / 1 页</span>
+          <button id="next-page" class="secondary" type="button">下一页</button>
+        </section>
+      </section>
+
+      <section id="users-view" hidden>
+        <section class="section-head">
+          <div>
+            <h2>用户管理</h2>
+            <p>新增用户时，密码会以带盐 scrypt 哈希保存到数据库。</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <form id="user-form" class="grid-form user-form">
+            <label>
+              用户名
+              <input name="username" required placeholder="user_01" />
+            </label>
+            <label>
+              显示名
+              <input name="display_name" required placeholder="业务用户" />
+            </label>
+            <label>
+              密码
+              <input name="password" required type="password" placeholder="至少 8 位" />
+            </label>
+            <label>
+              角色
+              <select name="role">
+                <option value="user">普通用户</option>
+                <option value="admin">管理员</option>
+              </select>
+            </label>
+            <button type="submit">新增用户</button>
+          </form>
+          <p id="user-message" class="message" aria-live="polite"></p>
+        </section>
+
+        <section class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>用户名</th>
+                <th>显示名</th>
+                <th>角色</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody id="users"></tbody>
+          </table>
+        </section>
+      </section>
+    </main>
+
+    <div id="error-modal" class="modal" hidden role="alertdialog" aria-modal="true" aria-labelledby="error-title">
+      <div class="modal-panel">
+        <h2 id="error-title">提示</h2>
+        <p id="error-text"></p>
+        <button id="error-close" type="button">知道了</button>
+      </div>
+    </div>
+
+    <button id="back-to-top" class="back-to-top" type="button" aria-label="返回顶部" title="返回顶部">
+      ↑
+    </button>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
