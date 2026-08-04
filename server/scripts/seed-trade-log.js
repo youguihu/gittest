@@ -5,7 +5,11 @@ var path = require("path");
 var mysql = require("mysql2/promise");
 
 var tableCount = Math.max(parseInt(process.env.TABLE_COUNT || "5", 10) || 5, 1);
-var rowsPerTable = Math.max(parseInt(process.env.ROWS_PER_TABLE || "5000", 10) || 5000, 1000);
+var rowsPerTable = Math.max(parseInt(process.env.ROWS_PER_TABLE || "5000", 10) || 5000, 1);
+var parallel = Math.max(parseInt(process.env.PARALLEL || "1", 10) || 1, 1);
+var batchRows = Math.max(parseInt(process.env.BATCH_ROWS || "2000", 10) || 2000, 100);
+var reseed = String(process.env.RESEED || "0") === "1";
+var startDaysAgo = Math.max(parseInt(process.env.START_DAYS_AGO || "0", 10) || 0, 0);
 var confPath = path.resolve(__dirname, "..", "TradeLogQueryServer.conf");
 
 var config;
@@ -57,13 +61,25 @@ var DDL = "" +
   "  PRIMARY KEY (`id`)" +
   ") ENGINE=MyISAM DEFAULT CHARSET=utf8";
 
+var COLS = [
+  "application_name", "log_lvl", "log_date", "log_date_ms",
+  "process_id", "thread_id", "module_name", "src_location",
+  "processing_stage", "session_id", "time_consuming", "user_id",
+  "req_uri", "process_number", "backend_id", "backend_process_id",
+  "data_info", "mobile_no", "imei", "version", "os_version",
+  "imsi", "mac", "udid", "ip", "mach_id", "name", "succ"
+];
+
 function pad2(v) {
   return String(v).padStart(2, "0");
 }
 
-function dateSuffix(daysAgo) {
+function dateSuffix(daysAgo, template) {
   var d = new Date(Date.now() - daysAgo * 86400000);
-  return String(d.getFullYear()) + pad2(d.getMonth() + 1) + pad2(d.getDate());
+  return String(template || "YYYYMMDD")
+    .replace(/YYYY/g, String(d.getFullYear()))
+    .replace(/MM/g, pad2(d.getMonth() + 1))
+    .replace(/DD/g, pad2(d.getDate()));
 }
 
 function randomString(len, chars) {
@@ -74,114 +90,172 @@ function randomString(len, chars) {
   return result;
 }
 
+function escapeId(name) {
+  return "`" + name.replace(/`/g, "``") + "`";
+}
+
+// ---- deterministic generation (no per-row Math.random / Date.now) ----
+
+var POOL_SIZE = 256;
+function makePool(fn) {
+  var a = [];
+  for (var i = 0; i < POOL_SIZE; i += 1) a.push(fn(i));
+  return a;
+}
+var sessionPool = makePool(function () { return randomString(16, "0123456789abcdef"); });
+var mobilePool = makePool(function () { return "138" + randomString(8, "0123456789"); });
+var imeiPool = makePool(function () { return randomString(15, "0123456789abcdef"); });
+var imsiPool = makePool(function () { return randomString(15, "0123456789"); });
+var udidPool = makePool(function () { return randomString(40, "0123456789abcdef"); });
+var macPool = makePool(function () {
+  var s = randomString(12, "0123456789abcdef");
+  return s.replace(/(..)(?=.)/g, "$1:");
+});
+
 var userPool = [];
 for (var u = 0; u < 500; u += 1) {
   userPool.push("user_" + pad2(u % 100));
 }
 
-function rowFor(index, suffix) {
-  var userIdx = index % userPool.length;
-  var hour = Math.floor(index / 420) % 24;
-  var minute = Math.floor(index / 7) % 60;
-  var second = index % 60;
-  var ms = index % 999;
-  var succVal = index % 11 === 0 ? 0 : (index % 23 === 0 ? -1 : 1);
+var APPS = ["ATrade", "ATradeMoni", "AMNGame", "AlgoTrade"];
+var LVLS = ["INFO", "WARN", "ERROR", "DEBUG"];
+var MODS = ["Trade", "Order", "Quote", "Risk", "Account"];
+var CLASSES = ["TradeServlet", "OrderHandler", "QuoteService", "RiskCheck", "AccountManager"];
+var STAGES = ["下单", "风控", "成交", "清算", "推送"];
+var URIS = ["/api/trade/order", "/api/trade/quote", "/api/trade/cancel", "/api/account/balance", "/api/risk/check"];
+var VERS = ["6.0.1", "6.0.2", "6.1.0", "6.1.1", "6.2.0"];
+var OSVS = ["iOS 15.0", "iOS 16.0", "Android 12", "Android 13", "HarmonyOS 3.0"];
+var NAMES = ["测试交易", "测试下单", "测试行情", "测试风控", "测试账户"];
+var DATA_TS = "1750000000000";
 
-  return {
-    application_name: ["ATrade", "ATradeMoni", "AMNGame", "AlgoTrade"][index % 4],
-    log_lvl: ["INFO", "WARN", "ERROR", "DEBUG"][index % 4],
-    log_date: suffix.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3") + " " + pad2(hour) + ":" + pad2(minute) + ":" + pad2(second),
-    log_date_ms: ms,
-    process_id: "PID-" + pad2(index % 64),
-    thread_id: "THR-" + pad2(index % 32),
-    module_name: ["Trade", "Order", "Quote", "Risk", "Account"][index % 5],
-    src_location: "com.upchina.trade." + ["TradeServlet", "OrderHandler", "QuoteService", "RiskCheck", "AccountManager"][index % 5] + ".java:" + (100 + index % 900),
-    processing_stage: ["下单", "风控", "成交", "清算", "推送"][index % 5],
-    session_id: "SESS" + randomString(16, "0123456789abcdef"),
-    time_consuming: Math.floor(Math.random() * 5000),
-    user_id: userPool[userIdx],
-    req_uri: ["/api/trade/order", "/api/trade/quote", "/api/trade/cancel", "/api/account/balance", "/api/risk/check"][index % 5],
-    process_number: "P" + pad2(index % 16),
-    backend_id: "BE-" + pad2(index % 4),
-    backend_process_id: "BP-" + pad2(index % 8),
-    data_info: JSON.stringify({ reqId: index, timestamp: Date.now() }),
-    mobile_no: "138" + randomString(8, "0123456789"),
-    imei: randomString(15, "0123456789abcdef"),
-    version: ["6.0.1", "6.0.2", "6.1.0", "6.1.1", "6.2.0"][index % 5],
-    os_version: ["iOS 15.0", "iOS 16.0", "Android 12", "Android 13", "HarmonyOS 3.0"][index % 5],
-    imsi: randomString(15, "0123456789"),
-    mac: randomString(2, "0123456789abcdef") + ":" + randomString(2, "0123456789abcdef") + ":" + randomString(2, "0123456789abcdef") + ":" + randomString(2, "0123456789abcdef") + ":" + randomString(2, "0123456789abcdef") + ":" + randomString(2, "0123456789abcdef"),
-    udid: randomString(40, "0123456789abcdef"),
-    ip: "10." + (index % 64) + "." + (Math.floor(index / 64) % 256) + "." + ((index % 253) + 1),
-    mach_id: "MACH-" + pad2(index % 32),
-    name: "测试" + ["交易", "下单", "行情", "风控", "账户"][index % 5],
-    succ: succVal
-  };
+function pushRow(flat, i, dateStr) {
+  var hour = Math.floor(i / 420) % 24;
+  var minute = Math.floor(i / 7) % 60;
+  var second = i % 60;
+  var succ = i % 11 === 0 ? 0 : (i % 23 === 0 ? -1 : 1);
+  var time = (i * 7919) % 5000;
+  var p = i % POOL_SIZE;
+  flat.push(
+    APPS[i % 4], LVLS[i % 4],
+    dateStr + " " + pad2(hour) + ":" + pad2(minute) + ":" + pad2(second),
+    i % 999,
+    "PID-" + pad2(i % 64), "THR-" + pad2(i % 32),
+    MODS[i % 5],
+    "com.upchina.trade." + CLASSES[i % 5] + ".java:" + (100 + i % 900),
+    STAGES[i % 5],
+    "SESS" + sessionPool[p],
+    time,
+    userPool[i % userPool.length],
+    URIS[i % 5],
+    "P" + pad2(i % 16), "BE-" + pad2(i % 4), "BP-" + pad2(i % 8),
+    '{"reqId":' + i + ',"ts":' + DATA_TS + '}',
+    mobilePool[(p * 3) % POOL_SIZE],
+    imeiPool[(p * 5) % POOL_SIZE],
+    VERS[i % 5], OSVS[i % 5],
+    imsiPool[(p * 7) % POOL_SIZE],
+    macPool[(p * 11) % POOL_SIZE],
+    udidPool[(p * 13) % POOL_SIZE],
+    "10." + (i % 64) + "." + (Math.floor(i / 64) % 256) + "." + ((i % 253) + 1),
+    "MACH-" + pad2(i % 32),
+    NAMES[i % 5],
+    succ
+  );
 }
 
-async function seedTable(conn, tableName, suffix) {
-  var [existRows] = await conn.query("SELECT COUNT(*) AS c FROM " + escapeId(tableName));
-  if (existRows[0].c >= rowsPerTable) {
-    console.log("  " + tableName + " already has " + existRows[0].c + " rows, skipped");
-    return;
+function fmtTime(ms) {
+  var s = Math.round(ms / 1000);
+  if (s < 60) return s + "s";
+  var m = Math.floor(s / 60);
+  if (m < 60) return m + "m" + (s % 60) + "s";
+  return Math.floor(m / 60) + "h" + (m % 60) + "m" + (s % 60) + "s";
+}
+
+async function seedOneTask(task, conn) {
+  var tableName = task.tableName;
+  await conn.query(DDL.replace(/%TABLE%/g, tableName));
+
+  var [rows] = await conn.query("SELECT COUNT(*) AS c FROM " + escapeId(tableName));
+  var cnt = rows[0].c;
+  if (cnt >= rowsPerTable && !reseed) {
+    return { skipped: true, existing: cnt };
+  }
+  if (cnt > 0) {
+    await conn.query("DELETE FROM " + escapeId(tableName));
   }
 
-  await conn.query("DELETE FROM " + escapeId(tableName));
+  var dateStr = String(task.suffix).replace(/^(\d{4})\D?(\d{2})\D?(\d{2})$/, "$1-$2-$3");
+  await conn.query("ALTER TABLE " + escapeId(tableName) + " DISABLE KEYS").catch(function () {});
 
-  var cols = [
-    "application_name", "log_lvl", "log_date", "log_date_ms",
-    "process_id", "thread_id", "module_name", "src_location",
-    "processing_stage", "session_id", "time_consuming", "user_id",
-    "req_uri", "process_number", "backend_id", "backend_process_id",
-    "data_info", "mobile_no", "imei", "version", "os_version",
-    "imsi", "mac", "udid", "ip", "mach_id", "name", "succ"
-  ];
+  var colList = COLS.map(escapeId).join(", ");
+  var ph1 = "(" + COLS.map(function () { return "?"; }).join(", ") + ")";
+  var sqlHead = "INSERT INTO " + escapeId(tableName) + " (" + colList + ") VALUES ";
 
-  var colList = cols.map(escapeId).join(", ");
-  var batchSize = 200;
-  var inserted = 0;
-  for (var i = 0; i < rowsPerTable; i += batchSize) {
-    var end = Math.min(i + batchSize, rowsPerTable);
-    var valRows = [];
-    for (var j = i; j < end; j += 1) {
-      var row = rowFor(j, suffix);
-      valRows.push([
-        row.application_name, row.log_lvl, row.log_date, row.log_date_ms,
-        row.process_id, row.thread_id, row.module_name, row.src_location,
-        row.processing_stage, row.session_id, row.time_consuming, row.user_id,
-        row.req_uri, row.process_number, row.backend_id, row.backend_process_id,
-        row.data_info, row.mobile_no, row.imei, row.version, row.os_version,
-        row.imsi, row.mac, row.udid, row.ip, row.mach_id, row.name, row.succ
-      ]);
-    }
-    var placeholders = valRows.map(function() {
-      return "(" + cols.map(function() { return "?"; }).join(", ") + ")";
-    }).join(", ");
-    var sql = "INSERT INTO " + escapeId(tableName) + " (" + colList + ") VALUES " + placeholders;
+  for (var i = 0; i < rowsPerTable; i += batchRows) {
+    var end = Math.min(i + batchRows, rowsPerTable);
+    var n = end - i;
     var flat = [];
-    valRows.forEach(function(v) { flat = flat.concat(v); });
-    await conn.query(sql, flat);
-    inserted += valRows.length;
-    process.stdout.write("\r  " + tableName + ": " + inserted + "/" + rowsPerTable);
+    for (var j = i; j < end; j += 1) {
+      pushRow(flat, j, dateStr);
+    }
+    await conn.query(sqlHead + new Array(n).fill(ph1).join(", "), flat);
   }
-  process.stdout.write("\n");
-  console.log("  " + tableName + " seeded: " + inserted + " rows");
+
+  await conn.query("ALTER TABLE " + escapeId(tableName) + " ENABLE KEYS").catch(function () {});
+  return { skipped: false };
 }
 
-function escapeId(name) {
-  return "`" + name.replace(/`/g, "``") + "`";
+async function runWorker(tasks, shared) {
+  var conns = {};
+  while (true) {
+    var task = shared.nextTask();
+    if (!task) break;
+    try {
+      if (!conns[task.dbName]) {
+        conns[task.dbName] = await mysql.createConnection({
+          host: shared.host, port: shared.port, user: shared.user,
+          password: shared.pass, charset: "utf8", database: task.dbName
+        });
+      }
+      var t0 = Date.now();
+      var res = await seedOneTask(task, conns[task.dbName]);
+      shared.done += 1;
+      shared.rows += rowsPerTable;
+      var elapsed = Date.now() - t0;
+      var et = Date.now() - shared.start;
+      var eta = (et / shared.done) * (shared.total - shared.done);
+      var rate = shared.rows / (et / 1000);
+      var line = "  [" + shared.done + "/" + shared.total + "] " + task.dbName + "." + task.tableName;
+      if (res.skipped) {
+        line += " skipped (exists " + res.existing + ")";
+      } else {
+        line += " " + rowsPerTable.toLocaleString() + " rows in " + (elapsed / 1000).toFixed(1) + "s";
+      }
+      line += " | total " + shared.rows.toLocaleString() + " rows (" +
+        ((shared.done / shared.total) * 100).toFixed(1) + "%) rate " +
+        (rate / 10000).toFixed(1) + "万/s ETA " + fmtTime(eta);
+      console.log(line);
+    } catch (e) {
+      shared.errors += 1;
+      console.error("  ERROR " + task.dbName + "." + task.tableName + ": " + ((e && e.message) || String(e)));
+    }
+  }
+  for (var k in conns) {
+    try { await conns[k].end(); } catch (e) {}
+  }
 }
 
-  config.loadConfig("TradeLogQueryServer.conf", "c").then(async function(ret) {
+config.loadConfig("TradeLogQueryServer.conf", "c").then(async function (ret) {
   var dbConfig = ret.db || {};
-  var namesRaw = String(dbConfig.names || "").trim();
-  var entries = namesRaw.split(",").map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+  var namesRaw = String(process.env.DB_NAMES || dbConfig.names || "").trim();
+  var entries = namesRaw.split(",").map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
 
   var tradeLogCfg = ret.tradeLog || {};
   var tablePrefix = String(tradeLogCfg.tablePrefix || "TBL_TRADE_LOG_");
+  var tableSuffixTemplate = String(tradeLogCfg.tableDateSuffix || "YYYYMMDD");
+  if (!/^[a-zA-Z0-9_]+$/.test(tableSuffixTemplate)) tableSuffixTemplate = "YYYYMMDD";
 
   if (entries.length === 0) {
-    console.error("No databases configured in <db> names field");
+    console.error("No databases configured in <db> names field (or DB_NAMES env)");
     process.exit(1);
   }
 
@@ -190,38 +264,51 @@ function escapeId(name) {
   var user = process.env.DB_USER || dbConfig.user || "root";
   var pass = process.env.DB_PASS || dbConfig.pass || dbConfig.password || "";
 
-  console.log("Table prefix: " + tablePrefix);
-  console.log("Tables per DB: " + tableCount + ", rows per table: " + rowsPerTable);
+  var totalTables = entries.length * tableCount;
+  var totalRows = totalTables * rowsPerTable;
+
+  console.log("=== trade log perf seed ===");
+  console.log("DBs: " + entries.length + " (" + entries.join(", ") + ")");
+  console.log("Tables per DB: " + tableCount + " -> total tables: " + totalTables);
+  console.log("Rows per table: " + rowsPerTable.toLocaleString() + " -> total rows: " + totalRows.toLocaleString());
+  console.log("Parallel workers: " + parallel + ", batch rows: " + batchRows + ", engine: MyISAM (DISABLE KEYS)");
   console.log("Host: " + host + ":" + port + ", user: " + user);
   console.log("");
 
+  var adminConn = await mysql.createConnection({ host: host, port: port, user: user, password: pass, charset: "utf8" });
   for (var ei = 0; ei < entries.length; ei += 1) {
-    var dbName = entries[ei];
-
-    console.log("=== " + dbName + " ===");
-
-    var conn = await mysql.createConnection({ host: host, port: port, user: user, password: pass, charset: "utf8" });
-
-    await conn.query("CREATE DATABASE IF NOT EXISTS " + escapeId(dbName) + " DEFAULT CHARSET utf8");
-    await conn.query("USE " + escapeId(dbName));
-    console.log("  Database ready: " + dbName);
-
-    for (var day = 0; day < tableCount; day += 1) {
-      var suffix = dateSuffix(day);
-      var tableName = tablePrefix + suffix;
-      var ddl = DDL.replace(/%TABLE%/g, tableName);
-      await conn.query(ddl);
-      console.log("  Table exists: " + tableName);
-      await seedTable(conn, tableName, suffix);
-    }
-
-    await conn.end();
-    console.log("");
+    await adminConn.query("CREATE DATABASE IF NOT EXISTS " + escapeId(entries[ei]) + " DEFAULT CHARSET utf8");
   }
+  await adminConn.end();
 
-  console.log("Done. All databases seeded.");
-  process.exit(0);
-}).catch(function(err) {
+  var tasks = [];
+  entries.forEach(function (dbName) {
+    for (var day = startDaysAgo; day < startDaysAgo + tableCount; day += 1) {
+      var suffix = dateSuffix(day, tableSuffixTemplate);
+      tasks.push({ dbName: dbName, tableName: tablePrefix + suffix, suffix: suffix });
+    }
+  });
+
+  var shared = {
+    host: host, port: port, user: user, pass: pass,
+    idx: 0, done: 0, rows: 0, errors: 0, total: tasks.length, start: Date.now(),
+    nextTask: function () {
+      return shared.idx < tasks.length ? tasks[shared.idx++] : null;
+    }
+  };
+
+  var workers = [];
+  for (var w = 0; w < Math.min(parallel, tasks.length); w += 1) {
+    workers.push(runWorker(tasks, shared));
+  }
+  await Promise.all(workers);
+
+  var et2 = Date.now() - shared.start;
+  console.log("");
+  console.log("Done. Tables: " + shared.done + "/" + shared.total + ", errors: " + shared.errors +
+    ", elapsed: " + fmtTime(et2) + ", avg rate: " + (shared.rows / (et2 / 1000) / 10000).toFixed(1) + "万 rows/s");
+  process.exit(shared.errors ? 1 : 0);
+}).catch(function (err) {
   console.error("Seed failed:", err.message || String(err));
   process.exit(1);
 });

@@ -4,7 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>系统登录</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      (function () {
+        var p = location.pathname;
+        var base = p.endsWith("/") ? p : p.slice(0, p.lastIndexOf("/") + 1);
+        document.write('<base href="' + base + '" />');
+      })();
+    </script>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="login-page">
     <canvas id="login-canvas" class="login-canvas" aria-hidden="true"></canvas>
@@ -38,7 +45,7 @@
       </div>
     </div>
 
-    <script src="/canvas-particles.js" defer></script>
-    <script src="/login.js" type="module"></script>
+    <script src="canvas-particles.js" defer></script>
+    <script src="login.js" type="module"></script>
   </body>
 </html>

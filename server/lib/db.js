@@ -5,6 +5,15 @@ var mysql = require("mysql2/promise");
 var pools = {};
 var databaseNames = [];
 
+function log(level, msg) {
+  var l = global.logger && global.logger[level];
+  if (l) {
+    l.debug(msg);
+  } else {
+    console.log(msg);
+  }
+}
+
 function init(dbConfig) {
   var namesRaw = dbConfig && dbConfig.names ? String(dbConfig.names) : "";
   var entries = namesRaw.split(",").map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
@@ -30,13 +39,14 @@ function init(dbConfig) {
     poolOptsCopy.database = dbName;
     var pool = mysql.createPool(poolOptsCopy);
     pool.on("connection", function() {
-      console.log("MySQL connection established: " + dbName + " @ " + poolOpts.host + ":" + poolOpts.port);
+      log("data", "MySQL connection established: " + dbName + " @ " + poolOpts.host + ":" + poolOpts.port);
     });
     pools[dbName] = pool;
     databaseNames.push(dbName);
   });
 
   global.dbPool = pools;
+  log("data", "Database pools initialized: " + databaseNames.join(", "));
 }
 
 function names() {
@@ -48,6 +58,7 @@ function query(dbName, sql, params) {
   if (!pool) {
     return Promise.reject(new Error("no database pool for: " + dbName));
   }
+  log("query", "[sql] db=" + dbName + " sql=" + sql + (params && params.length ? " params=" + JSON.stringify(params) : ""));
   return pool.query(sql, params || []).then(function(result) {
     return result[0];
   });
@@ -55,8 +66,8 @@ function query(dbName, sql, params) {
 
 function tableExists(dbName, tableName) {
   return query(dbName,
-    "SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
-    [tableName]
+    "SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
+    [dbName, tableName]
   ).then(function(rows) {
     return (rows[0] && rows[0].c > 0);
   });
@@ -65,10 +76,10 @@ function tableExists(dbName, tableName) {
 function verify() {
   return Promise.all(databaseNames.map(function(dbName) {
     return query(dbName, "SELECT 1 AS ok").then(function() {
-      console.log("Database connected: " + dbName);
+      log("data", "Database connected: " + dbName);
       return { db: dbName, ok: true };
     }).catch(function(err) {
-      console.log("Database connect failed: " + dbName + " - " + (err.message || String(err)));
+      log("error", "Database connect failed: " + dbName + " - " + (err.message || String(err)));
       return { db: dbName, ok: false, error: err.message };
     });
   }));

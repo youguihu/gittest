@@ -6,7 +6,7 @@
 - 提供后端 API：`app.js` + `routes/loginRecords.js` + `routes/users.js`
 - 按 TAF.js 风格启动：`bin/www`
 - 读取 TAF 风格配置：`ATMngWebServer.conf`
-- 查询 MySQL 多库分表数据：三个库 KDS_MONI / KDS_MONID / KDS_MONI_ZB，每个库中按日分表 `TBL_TRADE_LOG_YYYYMMDD`
+- 查询 MySQL 多库分表数据：三个库 KDS_MONI / KDS_MONID / KDS_MONI_ZB，每个库中按日分表 `TBL_TRADE_LOG_YYYY_MM_DD`（如 `TBL_TRADE_LOG_2023_10_13`）
 - 系统用户来自本地配置和进程内存缓存，不创建用户表
 
 ## 数据库配置
@@ -27,14 +27,40 @@
 
 支持环境变量覆盖所有库的连接参数：`DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASS`。
 
-日表前缀配置在 `<tradeLog>` 节：
+日表前缀与日期后缀模板配置在 `<tradeLog>` 节，`tableDateSuffix` 使用 `YYYY` / `MM` / `DD` 占位符拼接出分表后缀：
 
 ```conf
 <tradeLog>
   tablePrefix=TBL_TRADE_LOG_
-  tableDateSuffix=YYYYMMDD
+  tableDateSuffix=YYYY_MM_DD
 </tradeLog>
 ```
+
+- `YYYYMMDD` → `TBL_TRADE_LOG_20231013`
+- `YYYY_MM_DD` → `TBL_TRADE_LOG_2023_10_13`
+
+请确保该模板与库中实际分表命名一致（恒生交易日志分表通常为 `YYYY_MM_DD` 风格）。
+
+## 数据库查询入口（可选）
+
+index 页面可开启一个“数据库查询”入口，按输入的 MySQL 连接参数连接并执行任意 SQL、打印结果。由 `<dbQuery>` 节控制开关：
+
+```conf
+<dbQuery>
+  enabled=1    # 1=开启该入口，0=关闭（关闭后前端隐藏入口，API 直接返回 403）
+  maxRows=500  # SELECT 最多返回行数，超出截断并提示
+</dbQuery>
+```
+
+接口：
+
+```bash
+curl -X POST http://localhost:3000/api/db-query/execute \
+  -b <session_cookie> -H "Content-Type: application/json" \
+  -d '{"host":"127.0.0.1","port":3306,"user":"root","password":"","database":"KDS_MONI","sql":"SELECT * FROM TBL_TRADE_LOG_2023_10_13 LIMIT 50"}'
+```
+
+> 注意：该入口可在任意目标库执行任意 SQL，属于高权限操作，请仅在受控网络/管理场景下开启。连接参数仅用于本次请求，不保存密码。
 
 ## 运行
 

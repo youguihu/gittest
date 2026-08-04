@@ -2,6 +2,8 @@
 
 var express = require("express");
 var db = require("../lib/db");
+var logger = require("../lib/logger");
+var tradeLogTables = require("../lib/tradeLogTables");
 
 var router = express.Router();
 
@@ -54,7 +56,8 @@ function tableNameFromDate(date) {
   if (!/^[a-zA-Z0-9_]+$/.test(prefix)) {
     prefix = "TBL_TRADE_LOG_";
   }
-  return prefix + date.replace(/-/g, "");
+  var template = tradeLogTables.templateFromConfig(config);
+  return prefix + tradeLogTables.formatSuffix(template, date);
 }
 
 // 这三个索引字段任一有值即可免除日期必填和 31 天上限
@@ -156,9 +159,25 @@ router.get("/login-records", async function(req, res, next) {
       }
     }
 
+    logger.query.debug(
+      "[login-records] query req: range=" + (startDate ? formatDate(startDate) : "-") + "~" + (endDate ? formatDate(endDate) : "-") +
+      " indexFilter=" + (indexFilterPresent ? "yes" : "no") +
+      " filters=" + JSON.stringify(Object.keys(FILTER_MAP).filter(function(k) {
+        return String(req.query[k] || "").trim();
+      }).reduce(function(acc, k) {
+        acc[k] = req.query[k];
+        return acc;
+      }, {})) +
+      " page=" + page + " pageSize=" + pageSize +
+      " dbs=" + databaseNames.join(",") +
+      " dates=[" + dateList.join(",") + "]"
+    );
+
     var tablePrefix = "";
+    var tableSuffixTemplate = "YYYYMMDD";
     if (global.CONFIG && global.CONFIG.tradeLog) {
       tablePrefix = String(global.CONFIG.tradeLog.tablePrefix || "TBL_TRADE_LOG_");
+      tableSuffixTemplate = tradeLogTables.templateFromConfig(global.CONFIG.tradeLog);
     }
 
     var found = [];
@@ -174,52 +193,64 @@ router.get("/login-records", async function(req, res, next) {
       dateToTable[d] = tableNamesByDate[i];
     });
 
-    var dbResults = await Promise.all(databaseNames.map(async function(dbName) {
-      try {
-        var rows;
-        if (dateList.length > 0) {
-          var placeholders = tableNamesByDate.map(function() { return "?"; }).join(",");
-          rows = await db.query(dbName,
+    var filter = buildWhere(req);
+
+    // discovery：每个库 1 条 information_schema 查询，LOWER 兼容表名存储大小写差异
+    // （部分实例按小写存储表名，如 tbl_trade_log_2023_10_13）
+    var dbResults;
+    if (dateList.length > 0) {
+      var lowerNames = tableNamesByDate.map(function(n) { return n.toLowerCase(); });
+      var placeholders = lowerNames.map(function() { return "?"; }).join(",");
+      dbResults = await Promise.all(databaseNames.map(async function(dbName) {
+        try {
+          var rows = await db.query(dbName,
             "SELECT table_name AS t FROM information_schema.tables " +
-            "WHERE table_schema = DATABASE() AND table_name IN (" + placeholders + ")",
-            tableNamesByDate
+            "WHERE table_schema = ? AND LOWER(table_name) IN (" + placeholders + ")",
+            [dbName].concat(lowerNames)
           );
-        } else {
-          // userId 筛选且未指定日期：查询所有匹配前缀的表
-          rows = await db.query(dbName,
-            "SELECT table_name AS t FROM information_schema.tables " +
-            "WHERE table_schema = DATABASE() AND table_name LIKE ?",
-            [tablePrefix + "%"]
-          );
-        }
-        var existingTables = rows.map(function(r) { return r.t; });
-        var dbFound = [];
-        var dbMissing = [];
-        if (dateList.length > 0) {
+          var existing = {};
+          rows.forEach(function(r) { existing[r.t.toLowerCase()] = r.t; });
+          var dbFound = [];
+          var dbMissing = [];
           dateList.forEach(function(d) {
             var t = dateToTable[d];
-            var item = { db: dbName, table: t, date: d };
-            if (existingTables.indexOf(t) >= 0) {
-              dbFound.push(item);
+            var actual = existing[t.toLowerCase()];
+            if (actual) {
+              dbFound.push({ db: dbName, table: actual, date: d });
             } else {
-              dbMissing.push(item);
+              dbMissing.push({ db: dbName, table: t, date: d });
             }
           });
-        } else {
-          existingTables.forEach(function(t) {
-            var suffix = t.indexOf(tablePrefix) === 0 ? t.slice(tablePrefix.length) : "";
-            var formatted = "";
-            if (/^\d{8}$/.test(suffix)) {
-              formatted = suffix.slice(0, 4) + "-" + suffix.slice(4, 6) + "-" + suffix.slice(6, 8);
-            }
+          return { dbName: dbName, found: dbFound, missing: dbMissing, error: null };
+        } catch (err) {
+          return { dbName: dbName, found: [], missing: [], error: String(err.message || err) };
+        }
+      }));
+    } else {
+      // 无日期（用户ID等筛选）：枚举所有匹配前缀的表
+      var lowerPrefix = String(tablePrefix).toLowerCase();
+      dbResults = await Promise.all(databaseNames.map(async function(dbName) {
+        try {
+          var rows = await db.query(dbName,
+            "SELECT table_name AS t FROM information_schema.tables " +
+            "WHERE table_schema = ? AND LOWER(table_name) LIKE ?",
+            [dbName, lowerPrefix + "%"]
+          );
+          var dbFound = [];
+          var dbMissing = [];
+          rows.forEach(function(r) {
+            var t = r.t;
+            var lowerT = t.toLowerCase();
+            var suffix = lowerT.indexOf(lowerPrefix) === 0 ? t.slice(lowerPrefix.length) : "";
+            var formatted = tradeLogTables.parseSuffix(tableSuffixTemplate, suffix);
             dbFound.push({ db: dbName, table: t, date: formatted });
           });
+          return { dbName: dbName, found: dbFound, missing: dbMissing, error: null };
+        } catch (err) {
+          return { dbName: dbName, found: [], missing: [], error: String(err.message || err) };
         }
-        return { dbName: dbName, found: dbFound, missing: dbMissing, error: null };
-      } catch (err) {
-        return { dbName: dbName, found: [], missing: [], error: String(err.message || err) };
-      }
-    }));
+      }));
+    }
 
     dbResults.forEach(function(r) {
       if (r.error) {
@@ -229,19 +260,31 @@ router.get("/login-records", async function(req, res, next) {
       missing = missing.concat(r.missing);
     });
 
-    var filter = buildWhere(req);
+    dbResults.forEach(function(r) {
+      if (r.error) {
+        logger.error.error("[login-records] db=" + r.dbName + " discovery failed: " + r.error);
+      } else {
+        logger.query.debug(
+          "[login-records] db=" + r.dbName +
+          " found=[" + r.found.map(function(p) { return p.table; }).join(",") + "]" +
+          " missing=[" + r.missing.map(function(p) { return p.table; }).join(",") + "]"
+        );
+      }
+    });
 
-    var total = 0;
+    // 只对存在的表并行计数（连接池限速），表查询失败按 0 计
     var countResults = await Promise.all(found.map(function(pair) {
       return db.query(pair.db,
         "SELECT COUNT(*) AS c FROM " + escapeId(pair.table) + " " + filter.sql,
         filter.params
       ).then(function(rows) {
         return rows[0].c;
-      }).catch(function() {
+      }).catch(function(err) {
+        logger.error.error("[login-records] count failed: db=" + pair.db + " table=" + pair.table + " err=" + (err && err.message ? err.message : err));
         return 0;
       });
     }));
+    var total = 0;
     countResults.forEach(function(c) { total += c; });
 
     var rows = [];
@@ -269,7 +312,8 @@ router.get("/login-records", async function(req, res, next) {
             row.source_db = dbName;
           });
           return resultRows;
-        }).catch(function() {
+        }).catch(function(err) {
+          logger.error.error("[login-records] fetch failed: db=" + dbName + " tables=" + pairs.map(function(p) { return p.table; }).join(",") + " err=" + (err && err.message ? err.message : err));
           return [];
         });
       });
@@ -284,6 +328,13 @@ router.get("/login-records", async function(req, res, next) {
 
       rows = allRows.slice(offset, offset + pageSize);
     }
+
+    logger.query.debug(
+      "[login-records] query done: range=" + (startDate ? formatDate(startDate) : "-") + "~" + (endDate ? formatDate(endDate) : "-") +
+      " foundTables=" + found.length + " missingTables=" + missing.length +
+      " failedDbs=[" + failedDbs.join(",") + "]" +
+      " total=" + total + " returned=" + rows.length
+    );
 
     res.json({
       data: rows,

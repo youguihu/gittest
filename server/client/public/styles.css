@@ -511,6 +511,75 @@ button:disabled {
   font-size: 14px;
 }
 
+.conn-form {
+  display: grid;
+  gap: 14px;
+}
+
+.conn-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.sql-label {
+  gap: 6px;
+}
+
+textarea {
+  font: inherit;
+  min-height: 120px;
+  border: 1px solid #c9d4e2;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+  color: #1f2933;
+  resize: vertical;
+}
+
+textarea:focus {
+  border-color: var(--brand);
+  outline: 3px solid rgba(11, 74, 143, 0.16);
+}
+
+.dbquery-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dbquery-actions .hint {
+  color: #8a93a4;
+  font-size: 13px;
+}
+
+#dbquery-result {
+  overflow-x: auto;
+}
+
+#dbquery-result table {
+  min-width: 0;
+  width: auto;
+  max-width: 100%;
+}
+
+#dbquery-result td,
+#dbquery-result th {
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+#dbquery-result td {
+  font-family: Consolas, Menlo, monospace;
+}
+
+@media (max-width: 820px) {
+  .conn-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .message[data-type="success"] {
   color: #147a43;
 }

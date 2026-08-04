@@ -38,9 +38,9 @@ async function requestJson(url, options = {}) {
 
 async function redirectIfLoggedIn() {
   try {
-    const result = await requestJson("/api/auth/me");
+    const result = await requestJson("api/auth/me");
     if (result.data) {
-      location.replace("/");
+      location.replace("index.html");
     }
   } catch {
     setMessage("", "info");
@@ -57,12 +57,12 @@ loginForm.addEventListener("submit", async (event) => {
   submitButton.textContent = "登 录 中 ..";
 
   try {
-    await requestJson("/api/auth/login", {
+    await requestJson("api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    location.replace("/");
+    location.replace("index.html");
   } catch (error) {
     submitButton.disabled = false;
     submitButton.textContent = originalText;

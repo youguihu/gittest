@@ -9,8 +9,24 @@ var loginRecords = require("./routes/loginRecords");
 var auth = require("./lib/auth");
 var authRoutes = require("./routes/auth");
 var users = require("./routes/users");
+var dbQuery = require("./routes/dbQuery");
 
 var app = express();
+
+app.use(function(req, res, next) {
+  var conf = global.CONFIG && global.CONFIG.server;
+  var basePath = conf && conf.basePath ? conf.basePath : "";
+  if (basePath === "" || basePath === "/") return next();
+  var url = req.url;
+  if (url === basePath || url.indexOf(basePath + "/") === 0 || url.indexOf(basePath + "?") === 0) {
+    var rest = url.slice(basePath.length);
+    if (rest === "" || rest.charAt(0) === "?") {
+      return res.redirect(301, basePath + "/" + (rest.charAt(0) === "?" ? rest.slice(1) : ""));
+    }
+    req.url = rest;
+  }
+  next();
+});
 
 app.use(logger.morgan_taf_log());
 app.use(bodyParser.json({ limit: "64kb" }));
@@ -24,10 +40,11 @@ app.use("/api/meta", function(req, res) {
   if (global.CONFIG && global.CONFIG.server && global.CONFIG.server.systemName) {
     systemName = global.CONFIG.server.systemName;
   }
-  res.json({ systemName: systemName });
+  res.json({ systemName: systemName, dbQueryEnabled: dbQuery.dbQueryEnabled() });
 });
 app.use("/api", auth.requireLogin, loginRecords);
 app.use("/api", auth.requireLogin, users);
+app.use("/api", auth.requireLogin, dbQuery);
 app.use(express.static(path.join(__dirname, "client", "public")));
 
 app.get("*", function(req, res) {
