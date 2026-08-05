@@ -8,6 +8,7 @@ var config = require("../lib/config");
 var db = require("../lib/db");
 var logger = require("../lib/logger");
 var userStore = require("../lib/userStore");
+var tableCache = require("../lib/tableMetadataCache");
 
 function normalizePort(value) {
   var port = parseInt(value, 10);
@@ -29,6 +30,15 @@ function startUp(ret) {
       logger.error.error("Some databases failed to connect");
     }
   });
+
+  tableCache.init().then(function() {
+    logger.data.debug("Table metadata cache initialized");
+  }).catch(function(err) {
+    logger.error.error("Table metadata cache init failed: " + (err.message || String(err)));
+  });
+  setInterval(function() {
+    tableCache.refresh().catch(function() {});
+  }, 5 * 60 * 1000);
 
   userStore.init(ret);
 

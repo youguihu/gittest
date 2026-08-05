@@ -3,7 +3,7 @@
 var express = require("express");
 var db = require("../lib/db");
 var logger = require("../lib/logger");
-var tradeLogTables = require("../lib/tradeLogTables");
+var tableCache = require("../lib/tableMetadataCache");
 
 var router = express.Router();
 
@@ -50,17 +50,7 @@ function formatDate(date) {
   return year + "-" + month + "-" + day;
 }
 
-function tableNameFromDate(date) {
-  var config = global.CONFIG && global.CONFIG.tradeLog ? global.CONFIG.tradeLog : {};
-  var prefix = String(config.tablePrefix || "TBL_TRADE_LOG_");
-  if (!/^[a-zA-Z0-9_]+$/.test(prefix)) {
-    prefix = "TBL_TRADE_LOG_";
-  }
-  var template = tradeLogTables.templateFromConfig(config);
-  return prefix + tradeLogTables.formatSuffix(template, date);
-}
-
-// 这三个索引字段任一有值即可免除日期必填和 31 天上限
+// 这三个索引字段任一有值即可免除日期必填
 function hasIndexFilter(req) {
   var keys = ["username", "user_id", "mobile", "mobile_no", "name"];
   for (var i = 0; i < keys.length; i += 1) {
@@ -101,16 +91,8 @@ function escapeStr(name) {
   return "'" + name.replace(/'/g, "''") + "'";
 }
 
-function rowSort(a, b) {
-  if (a.log_date !== b.log_date) {
-    return a.log_date < b.log_date ? 1 : -1;
-  }
-  var aMs = parseInt(a.log_date_ms || 0, 10);
-  var bMs = parseInt(b.log_date_ms || 0, 10);
-  if (aMs !== bMs) {
-    return aMs < bMs ? 1 : -1;
-  }
-  return (b.id - a.id);
+function extractDate(datetime) {
+  return String(datetime || "").substring(0, 10);
 }
 
 router.get("/login-records", async function(req, res, next) {
@@ -129,25 +111,10 @@ router.get("/login-records", async function(req, res, next) {
       return;
     }
 
-    // 最大日期跨度仅在无索引筛选时生效，默认 7 天，可通过 conf 的 tradeLog.maxDaySpan 修改
-    var maxDaySpan = 7;
-    if (global.CONFIG && global.CONFIG.tradeLog && global.CONFIG.tradeLog.maxDaySpan) {
-      var confSpan = parseInt(global.CONFIG.tradeLog.maxDaySpan, 10);
-      if (!Number.isNaN(confSpan) && confSpan > 0) maxDaySpan = confSpan;
-    }
-    if (!indexFilterPresent && startDate && endDate) {
-      var dayCount = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
-      if (dayCount > maxDaySpan) {
-        res.status(400).json({ error: "日期区间不能超过 " + maxDaySpan + " 天（按天分表查询，跨度过大会扫描过多分表，影响性能；请缩小范围，或通过用户ID/手机号/名称等精确筛选以解除日期限制）" });
-        return;
-      }
-    }
-
-    var page = Math.max(parseInt(req.query.page || "1", 10) || 1, 1);
     var pageSize = Math.min(
       Math.max(parseInt(req.query.pageSize || req.query.limit || "50", 10) || 50, 1), 200
     );
-    var offset = (page - 1) * pageSize;
+    var isAsc = String(req.query.order || "").toLowerCase() === "asc";
 
     var databaseNames = db.names();
     var dateList = [];
@@ -168,181 +135,141 @@ router.get("/login-records", async function(req, res, next) {
         acc[k] = req.query[k];
         return acc;
       }, {})) +
-      " page=" + page + " pageSize=" + pageSize +
+      " pageSize=" + pageSize + " order=" + (isAsc ? "asc" : "desc") +
       " dbs=" + databaseNames.join(",") +
       " dates=[" + dateList.join(",") + "]"
     );
 
-    var tablePrefix = "";
-    var tableSuffixTemplate = "YYYYMMDD";
-    if (global.CONFIG && global.CONFIG.tradeLog) {
-      tablePrefix = String(global.CONFIG.tradeLog.tablePrefix || "TBL_TRADE_LOG_");
-      tableSuffixTemplate = tradeLogTables.templateFromConfig(global.CONFIG.tradeLog);
-    }
-
-    var found = [];
-    var missing = [];
-    var failedDbs = [];
-
-    var tableNamesByDate = dateList.map(function(d) {
-      return tableNameFromDate(d);
-    });
-
-    var dateToTable = {};
-    dateList.forEach(function(d, i) {
-      dateToTable[d] = tableNamesByDate[i];
-    });
-
     var filter = buildWhere(req);
 
-    // discovery：每个库 1 条 information_schema 查询，LOWER 兼容表名存储大小写差异
-    // （部分实例按小写存储表名，如 tbl_trade_log_2023_10_13）
-    var dbResults;
-    if (dateList.length > 0) {
-      var lowerNames = tableNamesByDate.map(function(n) { return n.toLowerCase(); });
-      var placeholders = lowerNames.map(function() { return "?"; }).join(",");
-      dbResults = await Promise.all(databaseNames.map(async function(dbName) {
-        try {
-          var rows = await db.query(dbName,
-            "SELECT table_name AS t FROM information_schema.tables " +
-            "WHERE table_schema = ? AND LOWER(table_name) IN (" + placeholders + ")",
-            [dbName].concat(lowerNames)
-          );
-          var existing = {};
-          rows.forEach(function(r) { existing[r.t.toLowerCase()] = r.t; });
-          var dbFound = [];
-          var dbMissing = [];
-          dateList.forEach(function(d) {
-            var t = dateToTable[d];
-            var actual = existing[t.toLowerCase()];
-            if (actual) {
-              dbFound.push({ db: dbName, table: actual, date: d });
-            } else {
-              dbMissing.push({ db: dbName, table: t, date: d });
-            }
-          });
-          return { dbName: dbName, found: dbFound, missing: dbMissing, error: null };
-        } catch (err) {
-          return { dbName: dbName, found: [], missing: [], error: String(err.message || err) };
-        }
-      }));
-    } else {
-      // 无日期（用户ID等筛选）：枚举所有匹配前缀的表
-      var lowerPrefix = String(tablePrefix).toLowerCase();
-      dbResults = await Promise.all(databaseNames.map(async function(dbName) {
-        try {
-          var rows = await db.query(dbName,
-            "SELECT table_name AS t FROM information_schema.tables " +
-            "WHERE table_schema = ? AND LOWER(table_name) LIKE ?",
-            [dbName, lowerPrefix + "%"]
-          );
-          var dbFound = [];
-          var dbMissing = [];
-          rows.forEach(function(r) {
-            var t = r.t;
-            var lowerT = t.toLowerCase();
-            var suffix = lowerT.indexOf(lowerPrefix) === 0 ? t.slice(lowerPrefix.length) : "";
-            var formatted = tradeLogTables.parseSuffix(tableSuffixTemplate, suffix);
-            dbFound.push({ db: dbName, table: t, date: formatted });
-          });
-          return { dbName: dbName, found: dbFound, missing: dbMissing, error: null };
-        } catch (err) {
-          return { dbName: dbName, found: [], missing: [], error: String(err.message || err) };
-        }
-      }));
+    var afterCursor = null;
+    if (req.query.afterDate) {
+      afterCursor = {
+        log_date: String(req.query.afterDate || ""),
+        log_date_ms: parseInt(req.query.afterMs, 10) || 0,
+        id: parseInt(req.query.afterId, 10) || 0,
+        table: String(req.query.afterTable || "")
+      };
     }
 
-    dbResults.forEach(function(r) {
-      if (r.error) {
-        failedDbs.push(r.dbName);
-      }
-      found = found.concat(r.found);
-      missing = missing.concat(r.missing);
-    });
+    var tableInfos;
+    if (dateList.length > 0) {
+      tableInfos = tableCache.getTableCounts(databaseNames, dateList);
+    } else {
+      tableInfos = tableCache.getAllTables(databaseNames);
+    }
 
-    dbResults.forEach(function(r) {
-      if (r.error) {
-        logger.error.error("[login-records] db=" + r.dbName + " discovery failed: " + r.error);
-      } else {
-        logger.query.debug(
-          "[login-records] db=" + r.dbName +
-          " found=[" + r.found.map(function(p) { return p.table; }).join(",") + "]" +
-          " missing=[" + r.missing.map(function(p) { return p.table; }).join(",") + "]"
-        );
-      }
-    });
+    var found = tableInfos.filter(function(t) { return t.exists; });
+    var missing = tableInfos.filter(function(t) { return !t.exists && dateList.length > 0; });
+    var failedDbs = [];
 
-    // 只对存在的表并行计数（连接池限速），表查询失败按 0 计
-    var countResults = await Promise.all(found.map(function(pair) {
-      return db.query(pair.db,
-        "SELECT COUNT(*) AS c FROM " + escapeId(pair.table) + " " + filter.sql,
-        filter.params
-      ).then(function(rows) {
-        return rows[0].c;
-      }).catch(function(err) {
-        logger.error.error("[login-records] count failed: db=" + pair.db + " table=" + pair.table + " err=" + (err && err.message ? err.message : err));
-        return 0;
-      });
-    }));
-    var total = 0;
-    countResults.forEach(function(c) { total += c; });
+    logger.query.debug(
+      "[login-records] cache: foundTables=" + found.length + " missingTables=" + missing.length +
+      " failedDbs=[" + failedDbs.join(",") + "]" +
+      " cursor=" + (afterCursor ? (afterCursor.log_date + "|" + afterCursor.log_date_ms + "|" + afterCursor.id + "|" + afterCursor.table) : "none")
+    );
 
     var rows = [];
-    if (found.length > 0 && total > 0) {
-      var dbGroup = {};
-      found.forEach(function(pair) {
-        if (!dbGroup[pair.db]) dbGroup[pair.db] = [];
-        dbGroup[pair.db].push(pair);
-      });
+    var hasMore = false;
+    var nextCursor = null;
 
+    if (found.length > 0) {
       var selectColsStr = SELECT_COLS.map(escapeId).join(",");
+      var cursorDate = afterCursor ? extractDate(afterCursor.log_date) : null;
 
-      var fetchPromises = Object.keys(dbGroup).map(function(dbName) {
-        var pairs = dbGroup[dbName];
-        var selects = pairs.map(function(pair) {
-          return "SELECT " + selectColsStr + ", " + escapeStr(pair.table) + " AS source_table FROM " + escapeId(pair.table) + " " + filter.sql;
-        });
-        var sql = "SELECT * FROM (" + selects.join(" UNION ALL ") + ") __t";
-        var repeatedParams = [];
-        pairs.forEach(function() {
-          repeatedParams = repeatedParams.concat(filter.params);
-        });
-        return db.query(dbName, sql, repeatedParams).then(function(resultRows) {
-          resultRows.forEach(function(row) {
-            row.source_db = dbName;
-          });
-          return resultRows;
-        }).catch(function(err) {
-          logger.error.error("[login-records] fetch failed: db=" + dbName + " tables=" + pairs.map(function(p) { return p.table; }).join(",") + " err=" + (err && err.message ? err.message : err));
-          return [];
-        });
+      var dateGroups = {};
+      found.forEach(function(pair) {
+        if (!dateGroups[pair.date]) dateGroups[pair.date] = [];
+        dateGroups[pair.date].push(pair);
       });
+      var sortedDates = Object.keys(dateGroups).sort();
+      if (!isAsc) sortedDates.reverse();
 
-      var fetched = await Promise.all(fetchPromises);
+      var remaining = pageSize + 1;
       var allRows = [];
-      fetched.forEach(function(batch) {
-        allRows = allRows.concat(batch);
-      });
 
-      allRows.sort(rowSort);
+      for (var di = 0; di < sortedDates.length && remaining > 0; di++) {
+        var date = sortedDates[di];
 
-      rows = allRows.slice(offset, offset + pageSize);
+        if (cursorDate && (isAsc ? date < cursorDate : date > cursorDate)) continue;
+
+        var isCursorDate = cursorDate && date === cursorDate;
+        var pairs = dateGroups[date];
+        var op = isAsc ? ">" : "<";
+        var dir = isAsc ? "ASC" : "DESC";
+
+        var dbResults = await Promise.all(pairs.map(function(pair) {
+          var sql = "SELECT " + selectColsStr + ", " + escapeStr(pair.table) + " AS source_table FROM " + escapeId(pair.table);
+          var parts = [];
+          var params = [];
+          if (filter.sql) {
+            parts.push(filter.sql.substring(6));
+            params = params.concat(filter.params);
+          }
+          if (isCursorDate && afterCursor) {
+            parts.push("(log_date, log_date_ms, id, " + escapeStr(pair.table) + ") " + op + " (?, ?, ?, ?)");
+            params.push(afterCursor.log_date, afterCursor.log_date_ms, afterCursor.id, afterCursor.table);
+          }
+          if (parts.length > 0) {
+            sql += " WHERE " + parts.join(" AND ");
+          }
+          sql += " ORDER BY log_date " + dir + ", log_date_ms " + dir + ", id " + dir + " LIMIT " + remaining;
+
+          return db.query(pair.db, sql, params).then(function(resultRows) {
+            resultRows.forEach(function(row) {
+              row.source_db = pair.db;
+            });
+            return resultRows;
+          }).catch(function(err) {
+            logger.error.error("[login-records] fetch failed: db=" + pair.db + " table=" + pair.table + " err=" + (err && err.message ? err.message : err));
+            return [];
+          });
+        }));
+
+        var dateRows = [];
+        dbResults.forEach(function(b) { dateRows = dateRows.concat(b); });
+        dateRows.sort(function(a, b) {
+          if (a.log_date !== b.log_date) {
+            return isAsc ? (a.log_date < b.log_date ? -1 : 1) : (a.log_date < b.log_date ? 1 : -1);
+          }
+          if (a.log_date_ms !== b.log_date_ms) return isAsc ? a.log_date_ms - b.log_date_ms : b.log_date_ms - a.log_date_ms;
+          if (a.id !== b.id) return isAsc ? a.id - b.id : b.id - a.id;
+          return isAsc
+            ? (a.source_table || "").localeCompare(b.source_table || "")
+            : (b.source_table || "").localeCompare(a.source_table || "");
+        });
+        allRows = allRows.concat(dateRows);
+        remaining = pageSize + 1 - allRows.length;
+      }
+
+      hasMore = allRows.length > pageSize;
+      rows = allRows.slice(0, pageSize);
+
+      if (hasMore && rows.length > 0) {
+        var last = rows[rows.length - 1];
+        nextCursor = {
+          db: last.source_db,
+          table: last.source_table,
+          log_date: last.log_date,
+          log_date_ms: last.log_date_ms,
+          id: last.id
+        };
+      }
     }
 
     logger.query.debug(
       "[login-records] query done: range=" + (startDate ? formatDate(startDate) : "-") + "~" + (endDate ? formatDate(endDate) : "-") +
       " foundTables=" + found.length + " missingTables=" + missing.length +
       " failedDbs=[" + failedDbs.join(",") + "]" +
-      " total=" + total + " returned=" + rows.length
+      " returned=" + rows.length + " hasMore=" + hasMore
     );
 
     res.json({
       data: rows,
       pagination: {
-        page: page,
         pageSize: pageSize,
-        total: total,
-        totalPages: Math.max(Math.ceil(total / pageSize), 1)
+        hasMore: hasMore,
+        nextCursor: nextCursor
       },
       tables: found.map(function(p) { return { db: p.db, table: p.table }; }),
       missingTables: missing.map(function(p) { return { db: p.db, table: p.table }; }),
