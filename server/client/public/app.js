@@ -27,14 +27,17 @@ const errorModal = document.querySelector("#error-modal");
 const errorText = document.querySelector("#error-text");
 const errorClose = document.querySelector("#error-close");
 const backToTop = document.querySelector("#back-to-top");
+const sortOrderBtn = document.querySelector("#sort-order-btn");
 
 let activeUser = null;
 let dbQueryEnabled = false;
+let pageCursors = [];
+let currentPage = 1;
+let sortOrder = "desc";
 let currentPagination = {
-  page: 1,
   pageSize: 50,
-  total: 0,
-  totalPages: 1
+  hasMore: false,
+  nextCursor: null
 };
 
 function setMessage(target, text, type = "info") {
@@ -155,10 +158,10 @@ function showDbQuery() {
 
 function updatePager(pagination) {
   currentPagination = pagination;
-  pageInput.value = String(pagination.page);
-  pageInfo.textContent = `第 ${pagination.page} / ${pagination.totalPages} 页，共 ${pagination.total} 条`;
-  prevPageButton.disabled = pagination.page <= 1;
-  nextPageButton.disabled = pagination.page >= pagination.totalPages;
+  pageInput.value = String(currentPage);
+  pageInfo.textContent = "第 " + currentPage + " 页";
+  prevPageButton.disabled = currentPage <= 1;
+  nextPageButton.disabled = !pagination.hasMore;
 }
 
 async function showUsers() {
@@ -185,15 +188,15 @@ function renderLoginRecords(records, result) {
   );
 
   if (records.length === 0) {
-    recordsTableBody.innerHTML = '<tr><td colspan="10" class="empty">没有查询到交易日志</td></tr>';
+    recordsTableBody.innerHTML = '<tr><td colspan="12" class="empty">没有查询到交易日志</td></tr>';
     return;
   }
 
   records.forEach((record) => {
     const row = document.createElement("tr");
-    appendCell(row, record.name).classList.add("col-primary");
     appendCell(row, record.user_id).classList.add("col-primary");
     appendCell(row, record.mobile_no).classList.add("col-primary");
+    appendCell(row, record.req_uri);
     const resultCell = document.createElement("td");
     resultCell.classList.add("col-primary");
     const badge = document.createElement("span");
@@ -203,9 +206,11 @@ function renderLoginRecords(records, result) {
     row.appendChild(resultCell);
     appendCell(row, record.processing_stage).classList.add("col-primary");
     appendCell(row, record.log_date).classList.add("col-primary");
-    appendCell(row, record.req_uri);
     appendCell(row, record.time_consuming != null ? record.time_consuming : "");
-    appendCell(row, record.source_db).classList.add("col-secondary");
+    appendCell(row, record.name).classList.add("col-primary");
+    appendCell(row, record.session_id).classList.add("col-secondary");
+    appendCell(row, record.backend_process_id).classList.add("col-secondary");
+    appendCell(row, record.source_db).classList.add("col-muted");
     // 详情按钮
     const actionCell = document.createElement("td");
     actionCell.classList.add("col-action");
@@ -224,7 +229,7 @@ function showRecordDetail(record) {
   const detailModal = document.querySelector("#detail-modal");
   const detailBody = document.querySelector("#detail-body");
   const fields = [
-    ["姓名", record.name],
+    ["接口名", record.name],
     ["用户 ID", record.user_id],
     ["手机号", record.mobile_no],
     ["结果", succText(record.succ)],
@@ -242,9 +247,9 @@ function showRecordDetail(record) {
     ["模块名", record.module_name],
     ["源码位置", record.src_location],
     ["会话 ID", record.session_id],
-    ["流水号", record.process_number],
-    ["后端 ID", record.backend_id],
-    ["后端进程 ID", record.backend_process_id],
+    ["组号", record.process_number],
+    ["柜台标识", record.backend_id],
+    ["柜台接口号", record.backend_process_id],
     ["数据信息", record.data_info],
     ["IMEI", record.imei],
     ["版本", record.version],
@@ -292,9 +297,35 @@ function renderUsers(users) {
   });
 }
 
-async function loadLoginRecords() {
+async function loadLoginRecords(page) {
+  if (page === undefined || page === null) page = currentPage;
   const params = new URLSearchParams(new FormData(recordForm));
+  params.set("order", sortOrder);
+  if (page === 1) {
+    pageCursors = [];
+  } else if (page === pageCursors.length + 1) {
+    const c = pageCursors[pageCursors.length - 1];
+    if (c) {
+      params.set("afterDate", c.log_date);
+      params.set("afterMs", c.log_date_ms);
+      params.set("afterId", c.id);
+      params.set("afterTable", c.table);
+    }
+  } else if (page <= pageCursors.length) {
+    const c = pageCursors[page - 2];
+    if (c) {
+      params.set("afterDate", c.log_date);
+      params.set("afterMs", c.log_date_ms);
+      params.set("afterId", c.id);
+      params.set("afterTable", c.table);
+    }
+    pageCursors.length = page;
+  }
   const result = await requestJson(`api/login-records?${params.toString()}`);
+  if (result.pagination.nextCursor) {
+    pageCursors[page - 1] = result.pagination.nextCursor;
+  }
+  currentPage = page;
   renderLoginRecords(result.data, result);
 }
 
@@ -435,7 +466,7 @@ logoutButton.addEventListener("click", async () => {
 if (loginRecordsTab) {
   loginRecordsTab.addEventListener("click", async () => {
     showLoginRecords();
-    await loadLoginRecords();
+    await loadLoginRecords(1);
   });
 }
 
@@ -451,23 +482,32 @@ if (usersTab) {
 recordForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    pageInput.value = "1";
-    await loadLoginRecords();
+    currentPage = 1;
+    await loadLoginRecords(1);
   } catch (error) {
     showError(error.message || "查询失败，请稍后重试");
   }
 });
 
+if (sortOrderBtn) {
+  sortOrderBtn.addEventListener("click", () => {
+    sortOrder = sortOrder === "desc" ? "asc" : "desc";
+    sortOrderBtn.textContent = sortOrder === "desc" ? "倒序 ↓" : "正序 ↑";
+    sortOrderBtn.title = "切换时间排序方向";
+    currentPage = 1;
+    pageCursors = [];
+    loadLoginRecords(1).catch((error) => showError(error.message || "查询失败，请稍后重试"));
+  });
+}
+
 prevPageButton.addEventListener("click", async () => {
-  if (currentPagination.page <= 1) return;
-  pageInput.value = String(currentPagination.page - 1);
-  await loadLoginRecords().catch((error) => showError(error.message || "翻页失败，请稍后重试"));
+  if (currentPage <= 1) return;
+  await loadLoginRecords(currentPage - 1).catch((error) => showError(error.message || "翻页失败，请稍后重试"));
 });
 
 nextPageButton.addEventListener("click", async () => {
-  if (currentPagination.page >= currentPagination.totalPages) return;
-  pageInput.value = String(currentPagination.page + 1);
-  await loadLoginRecords().catch((error) => showError(error.message || "翻页失败，请稍后重试"));
+  if (!currentPagination.hasMore) return;
+  await loadLoginRecords(currentPage + 1).catch((error) => showError(error.message || "翻页失败，请稍后重试"));
 });
 
 // 用户管理表单事件保留以便日后恢复
@@ -530,11 +570,12 @@ async function init() {
     setupUser(result.data);
     recordStartDate.value = today();
     recordEndDate.value = today();
-    pageInput.value = "1";
+    currentPage = 1;
+    pageCursors = [];
     pageSizeInput.value = "10";
     showLoginRecords();
     try {
-      await loadLoginRecords();
+      await loadLoginRecords(1);
     } catch (error) {
       showError(error.message || "查询失败，请稍后重试");
     }

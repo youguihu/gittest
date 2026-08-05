@@ -43,7 +43,7 @@
         <section class="section-head">
           <div>
             <h2>查询条件</h2>
-            <p>按日期筛选，或按用户id、手机号、姓名精确查询。</p>
+            <p>按日期筛选，或按用户id、手机号、接口中文名精确查询。</p>
           </div>
         </section>
 
@@ -53,7 +53,7 @@
               开始日期
               <input id="record-start-date" name="startDate" type="date" />
             </label>
-            <label>
+            <label class="stack-date-end">
               结束日期
               <input id="record-end-date" name="endDate" type="date" />
             </label>
@@ -66,12 +66,8 @@
               <input name="mobile_no" placeholder="手机号，精确匹配，不支持模糊" />
             </label>
             <label>
-              姓名
-              <input name="name" placeholder="姓名，支持模糊查询" />
-            </label>
-            <label>
-              处理阶段
-              <input name="processing_stage" placeholder="处理阶段" />
+              接口中文名
+              <input name="name" placeholder="接口中文名，支持模糊查询" />
             </label>
             <label>
               结果
@@ -86,7 +82,10 @@
               每页条数
               <input id="page-size" name="pageSize" type="number" min="1" max="200" value="10" />
             </label>
-            <button type="submit">查询</button>
+            <div class="form-actions">
+              <button type="submit">查询</button>
+              <button id="sort-order-btn" type="button" class="secondary" title="切换时间排序方向">倒序 ↓</button>
+            </div>
           </form>
           <input id="page" name="page" type="hidden" value="1" form="record-form" />
           <p id="record-message" class="message" aria-live="polite"></p>
@@ -96,14 +95,16 @@
           <table>
             <thead>
               <tr>
-                <th class="col-primary">姓名</th>
                 <th class="col-primary">用户 ID</th>
                 <th class="col-primary">手机号</th>
+                <th>接口号</th>
                 <th class="col-primary">结果</th>
                 <th class="col-primary">阶段</th>
                 <th class="col-primary">时间</th>
-                <th>接口号</th>
                 <th>耗时(ms)</th>
+                <th class="col-primary">接口名</th>
+                <th class="col-secondary">会话 ID</th>
+                <th class="col-secondary">柜台接口号</th>
                 <th class="col-secondary">数据来源库</th>
                 <th class="col-action">详情</th>
               </tr>

@@ -430,14 +430,25 @@ p {
 
 .grid-form {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
   gap: 12px;
   align-items: end;
 }
 
-.records-form button[type="submit"] {
-  grid-column: 5;
+.records-form .stack-date-end {
+  grid-column: 1;
   grid-row: 2;
+}
+
+.records-form .form-actions {
+  display: flex;
+  gap: 12px;
+  align-self: end;
+  justify-content: flex-start;
+}
+
+.records-form .form-actions button {
+  flex: 1 1 auto;
 }
 
 label {
@@ -616,8 +627,9 @@ th {
 }
 
 td {
-  color: #283544;
+  color: #3730a3;
   font-size: 14px;
+  font-weight: 700;
 }
 
 tbody tr:hover {
@@ -644,9 +656,15 @@ tbody tr:hover td {
 }
 
 td.col-secondary {
-  color: #8a93a4;
-  font-weight: 500;
+  color: #3730a3;
+  font-weight: 700;
   font-size: 13px;
+}
+
+td.col-muted {
+  color: #8a93a4;
+  font-weight: 700;
+  font-size: 12px;
 }
 
 th.col-action,
