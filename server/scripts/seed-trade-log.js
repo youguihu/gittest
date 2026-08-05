@@ -121,7 +121,7 @@ var APPS = ["ATrade", "ATradeMoni", "AMNGame", "AlgoTrade"];
 var LVLS = ["INFO", "WARN", "ERROR", "DEBUG"];
 var MODS = ["Trade", "Order", "Quote", "Risk", "Account"];
 var CLASSES = ["TradeServlet", "OrderHandler", "QuoteService", "RiskCheck", "AccountManager"];
-var STAGES = ["下单", "风控", "成交", "清算", "推送"];
+var STAGES = ["CLIREQ", "CLIRES", "req", "rsp", "RECVBD", "RECVBD", "RECVBD", "SENDBD", "SENDBD", "SENDBD"];
 var URIS = ["/api/trade/order", "/api/trade/quote", "/api/trade/cancel", "/api/account/balance", "/api/risk/check"];
 var VERS = ["6.0.1", "6.0.2", "6.1.0", "6.1.1", "6.2.0"];
 var OSVS = ["iOS 15.0", "iOS 16.0", "Android 12", "Android 13", "HarmonyOS 3.0"];
@@ -142,7 +142,7 @@ function pushRow(flat, i, dateStr) {
     "PID-" + pad2(i % 64), "THR-" + pad2(i % 32),
     MODS[i % 5],
     "com.upchina.trade." + CLASSES[i % 5] + ".java:" + (100 + i % 900),
-    STAGES[i % 5],
+    STAGES[i % STAGES.length],
     "SESS" + sessionPool[p],
     time,
     userPool[i % userPool.length],

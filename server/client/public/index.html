@@ -66,8 +66,24 @@
               <input name="mobile_no" placeholder="手机号，精确匹配，不支持模糊" />
             </label>
             <label>
-              接口中文名
-              <input name="name" placeholder="接口中文名，支持模糊查询" />
+              IMEI
+              <input name="imei" placeholder="设备 IMEI，精确匹配" />
+            </label>
+            <label>
+              IMSI
+              <input name="imsi" placeholder="SIM 卡 IMSI，精确匹配" />
+            </label>
+            <label>
+              IP
+              <input name="ip" placeholder="客户端 IP，精确匹配" />
+            </label>
+            <label>
+              MAC
+              <input name="mac" placeholder="网卡 MAC，精确匹配" />
+            </label>
+            <label>
+              UDID
+              <input name="udid" placeholder="设备 UDID，精确匹配" />
             </label>
             <label>
               结果
@@ -84,6 +100,7 @@
             </label>
             <div class="form-actions">
               <button type="submit">查询</button>
+              <button id="export-btn" type="button" class="secondary">导出</button>
               <button id="sort-order-btn" type="button" class="secondary" title="切换时间排序方向">倒序 ↓</button>
             </div>
           </form>
@@ -97,15 +114,17 @@
               <tr>
                 <th class="col-primary">用户 ID</th>
                 <th class="col-primary">手机号</th>
-                <th>接口号</th>
+                <th class="col-primary">会话 ID</th>
+                <th class="col-primary">接口号</th>
                 <th class="col-primary">结果</th>
                 <th class="col-primary">阶段</th>
                 <th class="col-primary">时间</th>
                 <th>耗时(ms)</th>
-                <th class="col-primary">接口名</th>
-                <th class="col-secondary">会话 ID</th>
-                <th class="col-secondary">柜台接口号</th>
-                <th class="col-secondary">数据来源库</th>
+                <th>IMEI</th>
+                <th>IMSI</th>
+                <th>IP</th>
+                <th>MAC</th>
+                <th>UDID</th>
                 <th class="col-action">详情</th>
               </tr>
             </thead>
@@ -238,6 +257,30 @@
         <h2 id="detail-title">记录详情</h2>
         <div id="detail-body" class="detail-body"></div>
         <button id="detail-close" type="button">关闭</button>
+      </div>
+    </div>
+
+    <div id="export-modal" class="modal detail-modal" hidden role="dialog" aria-modal="true" aria-labelledby="export-title">
+      <div class="modal-panel export-panel">
+        <h2 id="export-title">导出数据</h2>
+        <p id="export-desc">请选择导出范围，文件将以 CSV 格式下载。</p>
+        <div id="export-range-group" class="radio-group">
+          <label>
+            <input type="radio" name="export-range" value="current" checked />
+            <span>当前页记录</span>
+            <em id="export-current-hint" class="hint"></em>
+          </label>
+          <label>
+            <input type="radio" name="export-range" value="all" />
+            <span>全部匹配记录（含跨页）</span>
+            <em id="export-all-hint" class="hint">单次最多导出 10 万条</em>
+          </label>
+        </div>
+        <p id="export-status" class="export-status" hidden></p>
+        <div class="modal-actions">
+          <button id="export-cancel" type="button" class="secondary">取消</button>
+          <button id="export-confirm" type="button">确认导出</button>
+        </div>
       </div>
     </div>
 

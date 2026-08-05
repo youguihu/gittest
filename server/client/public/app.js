@@ -34,6 +34,7 @@ let dbQueryEnabled = false;
 let pageCursors = [];
 let currentPage = 1;
 let sortOrder = "desc";
+let currentRecords = [];
 let currentPagination = {
   pageSize: 50,
   hasMore: false,
@@ -45,14 +46,24 @@ function setMessage(target, text, type = "info") {
   target.dataset.type = type;
 }
 
-function showError(text) {
+const errorTitle = document.querySelector("#error-title");
+const errorPanel = errorModal.querySelector(".modal-panel");
+
+function showNotice(text, type) {
   errorText.textContent = text || "操作未完成，请稍后重试";
+  errorTitle.textContent = type === "success" ? "操作完成" : "提示";
+  errorPanel.classList.toggle("is-success", type === "success");
   errorModal.hidden = false;
   errorClose.focus();
 }
 
+function showError(text) {
+  showNotice(text, "error");
+}
+
 function hideError() {
   errorModal.hidden = true;
+  errorPanel.classList.remove("is-success");
 }
 
 function today() {
@@ -65,6 +76,16 @@ function today() {
 function appendCell(row, value) {
   const cell = document.createElement("td");
   cell.textContent = value != null ? value : "";
+  row.appendChild(cell);
+  return cell;
+}
+
+function appendTruncCell(row, value) {
+  const cell = document.createElement("td");
+  cell.classList.add("col-trunc");
+  const text = value != null ? String(value) : "";
+  cell.textContent = text;
+  if (text) cell.title = text;
   row.appendChild(cell);
   return cell;
 }
@@ -174,6 +195,7 @@ async function showUsers() {
 
 function renderLoginRecords(records, result) {
   recordsTableBody.innerHTML = "";
+  currentRecords = Array.isArray(records) ? records : [];
   const tableCount = result.tables.length;
   const missingCount = result.missingTables.length;
   const failedDbs = result.failedDbs || [];
@@ -188,7 +210,7 @@ function renderLoginRecords(records, result) {
   );
 
   if (records.length === 0) {
-    recordsTableBody.innerHTML = '<tr><td colspan="12" class="empty">没有查询到交易日志</td></tr>';
+    recordsTableBody.innerHTML = '<tr><td colspan="14" class="empty">没有查询到交易日志</td></tr>';
     return;
   }
 
@@ -196,7 +218,8 @@ function renderLoginRecords(records, result) {
     const row = document.createElement("tr");
     appendCell(row, record.user_id).classList.add("col-primary");
     appendCell(row, record.mobile_no).classList.add("col-primary");
-    appendCell(row, record.req_uri);
+    appendTruncCell(row, record.session_id).classList.add("col-primary");
+    appendCell(row, record.req_uri).classList.add("col-primary");
     const resultCell = document.createElement("td");
     resultCell.classList.add("col-primary");
     const badge = document.createElement("span");
@@ -207,10 +230,11 @@ function renderLoginRecords(records, result) {
     appendCell(row, record.processing_stage).classList.add("col-primary");
     appendCell(row, record.log_date).classList.add("col-primary");
     appendCell(row, record.time_consuming != null ? record.time_consuming : "");
-    appendCell(row, record.name).classList.add("col-primary");
-    appendCell(row, record.session_id).classList.add("col-secondary");
-    appendCell(row, record.backend_process_id).classList.add("col-secondary");
-    appendCell(row, record.source_db).classList.add("col-muted");
+    appendTruncCell(row, record.imei);
+    appendTruncCell(row, record.imsi);
+    appendCell(row, record.ip);
+    appendCell(row, record.mac);
+    appendTruncCell(row, record.udid);
     // 详情按钮
     const actionCell = document.createElement("td");
     actionCell.classList.add("col-action");
@@ -490,10 +514,12 @@ recordForm.addEventListener("submit", async (event) => {
 });
 
 if (sortOrderBtn) {
+  sortOrderBtn.classList.add("is-active");
   sortOrderBtn.addEventListener("click", () => {
     sortOrder = sortOrder === "desc" ? "asc" : "desc";
     sortOrderBtn.textContent = sortOrder === "desc" ? "倒序 ↓" : "正序 ↑";
     sortOrderBtn.title = "切换时间排序方向";
+    sortOrderBtn.classList.toggle("is-active", sortOrder === "desc");
     currentPage = 1;
     pageCursors = [];
     loadLoginRecords(1).catch((error) => showError(error.message || "查询失败，请稍后重试"));
@@ -545,6 +571,196 @@ if (detailClose) {
   detailClose.addEventListener("click", hideDetail);
   detailModal.addEventListener("click", (event) => {
     if (event.target === detailModal) hideDetail();
+  });
+}
+
+// 数据导出（CSV）：当前页在前端生成，全量匹配走后端 /login-records/export
+const exportBtn = document.querySelector("#export-btn");
+const exportModal = document.querySelector("#export-modal");
+const exportConfirm = document.querySelector("#export-confirm");
+const exportCancel = document.querySelector("#export-cancel");
+const exportRangeRadios = document.querySelectorAll('input[name="export-range"]');
+const exportCurrentHint = document.querySelector("#export-current-hint");
+const exportRangeGroup = document.querySelector("#export-range-group");
+const exportStatus = document.querySelector("#export-status");
+const exportTitle = document.querySelector("#export-title");
+const exportDesc = document.querySelector("#export-desc");
+
+const CSV_HEADERS = [
+  "接口名", "用户ID", "手机号", "结果", "处理阶段", "日期",
+  "接口号", "耗时(ms)", "数据来源库", "数据来源表", "应用名", "日志级别",
+  "毫秒时间", "进程ID", "线程ID", "模块名", "源码位置", "会话ID",
+  "组号", "柜台标识", "柜台接口号", "数据信息", "IMEI", "版本",
+  "OS版本", "IMSI", "MAC", "UDID", "IP", "设备ID", "记录ID"
+];
+const CSV_FIELDS = [
+  "name", "user_id", "mobile_no", "succ", "processing_stage", "log_date",
+  "req_uri", "time_consuming", "source_db", "source_table", "application_name", "log_lvl",
+  "log_date_ms", "process_id", "thread_id", "module_name", "src_location", "session_id",
+  "process_number", "backend_id", "backend_process_id", "data_info", "imei", "version",
+  "os_version", "imsi", "mac", "udid", "ip", "mach_id", "id"
+];
+
+function csvEscape(value) {
+  if (value == null) return "";
+  const s = String(value);
+  // 日期时间字段用 ="... " 公式形式输出，避免 Excel 打开时按日期格式显示丢掉秒
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) {
+    return '"=""' + s + '"""';
+  }
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function buildCsv(records) {
+  const lines = [CSV_HEADERS.map(csvEscape).join(",")];
+  records.forEach((record) => {
+    lines.push(CSV_FIELDS.map((col) => {
+      const v = col === "succ" ? succText(record[col]) : record[col];
+      return csvEscape(v);
+    }).join(","));
+  });
+  // BOM 头确保 Excel 正确识别 UTF-8
+  return "\ufeff" + lines.join("\r\n");
+}
+
+function downloadBlob(content, filename, mime) {
+  const blob = new Blob([content], { type: mime || "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function showExportModal() {
+  // 重置为初始选择态
+  exportTitle.textContent = "导出数据";
+  exportDesc.hidden = false;
+  exportRangeGroup.hidden = false;
+  if (exportCurrentHint) {
+    exportCurrentHint.textContent = `（当前页 ${currentRecords.length} 条）`;
+  }
+  exportStatus.hidden = true;
+  exportStatus.textContent = "";
+  exportStatus.dataset.type = "";
+  exportConfirm.hidden = false;
+  exportConfirm.disabled = false;
+  exportConfirm.textContent = "确认导出";
+  exportCancel.textContent = "取消";
+  exportModal.hidden = false;
+}
+
+function hideExportModal() {
+  exportModal.hidden = true;
+}
+
+function setExportStatus(text, type) {
+  exportStatus.textContent = text;
+  exportStatus.dataset.type = type;
+  exportStatus.hidden = false;
+}
+
+function setExportBusy(busy) {
+  exportConfirm.disabled = busy;
+  exportRangeGroup.style.opacity = busy ? "0.6" : "1";
+  exportRangeGroup.style.pointerEvents = busy ? "none" : "auto";
+}
+
+function exportCurrentPage() {
+  if (currentRecords.length === 0) {
+    setExportStatus("当前没有可导出的数据，请先执行查询", "error");
+    return;
+  }
+  const csv = buildCsv(currentRecords);
+  downloadBlob(csv, `trade_log_page_${currentPage}.csv`);
+  setExportStatus(`文件已生成，当前页共 ${currentRecords.length} 条记录，请通过浏览器下载提示保存到本地`, "success");
+}
+
+async function exportAllRecords() {
+  const params = new URLSearchParams(new FormData(recordForm));
+  params.set("order", sortOrder);
+  setExportBusy(true);
+  setExportStatus("正在查询并生成文件，请稍候…", "info");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+  let response;
+  try {
+    response = await fetch(`api/login-records/export?${params.toString()}`, {
+      credentials: "same-origin",
+      signal: controller.signal
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.name === "AbortError") {
+      throw new Error("导出超时（超过 5 分钟），请缩小日期范围或增加筛选条件后重试");
+    }
+    throw new Error("网络连接失败，可能是服务端处理时间过长或网络中断，请缩小查询范围后重试");
+  }
+  clearTimeout(timer);
+  if (response.status === 401) {
+    redirectToLogin();
+    return;
+  }
+  const contentType = response.headers.get("Content-Type") || "";
+  if (!response.ok || contentType.indexOf("application/json") >= 0) {
+    let msg = "导出失败，请稍后重试";
+    try {
+      const result = await response.json();
+      msg = result.error || msg;
+    } catch (e) {}
+    throw new Error(msg);
+  }
+  setExportStatus("文件生成完成，正在保存到本地…", "info");
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  let filename = "trade_log_export.csv";
+  const match = disposition.match(/filename="([^"]+)"/);
+  if (match) filename = match[1];
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  const rows = response.headers.get("X-Export-Rows");
+  const truncated = response.headers.get("X-Export-Truncated") === "1";
+  const tip = truncated ? "（已达导出上限，部分记录被截断，请缩小范围分批导出）" : "";
+  setExportStatus(`文件已生成，共 ${rows || ""} 条记录${tip}，请通过浏览器下载提示保存到本地`, "success");
+}
+
+if (exportBtn) {
+  exportBtn.addEventListener("click", showExportModal);
+}
+if (exportCancel) {
+  exportCancel.addEventListener("click", hideExportModal);
+  exportModal.addEventListener("click", (event) => {
+    if (event.target === exportModal) hideExportModal();
+  });
+}
+if (exportConfirm) {
+  exportConfirm.addEventListener("click", async () => {
+    const checked = Array.from(exportRangeRadios).find((r) => r.checked);
+    const range = checked ? checked.value : "current";
+    try {
+      if (range === "current") {
+        exportCurrentPage();
+      } else {
+        await exportAllRecords();
+      }
+      // 导出完成后，把确认按钮变成「关闭」，取消按钮隐藏
+      exportConfirm.hidden = true;
+      exportCancel.textContent = "关闭";
+      setExportBusy(false);
+    } catch (error) {
+      setExportBusy(false);
+      setExportStatus(error.message || "导出失败，请稍后重试", "error");
+    }
   });
 }
 document.addEventListener("keydown", (event) => {
