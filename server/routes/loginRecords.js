@@ -135,6 +135,30 @@ function getMaxDaySpan() {
   return span;
 }
 
+function getMaxExportRows() {
+  var rows = 100000;
+  try {
+    var cfg = global.CONFIG && global.CONFIG.tradeLog;
+    if (cfg && cfg.maxExportRows) {
+      var n = parseInt(cfg.maxExportRows, 10);
+      if (n > 0) rows = n;
+    }
+  } catch (e) {}
+  return rows;
+}
+
+function getMaxExportCsvBytes() {
+  var bytes = 8 * 1024 * 1024;
+  try {
+    var cfg = global.CONFIG && global.CONFIG.tradeLog;
+    if (cfg && cfg.maxExportCsvBytes) {
+      var n = parseInt(cfg.maxExportCsvBytes, 10);
+      if (n > 0) bytes = n;
+    }
+  } catch (e) {}
+  return bytes;
+}
+
 // 与详情弹窗字段顺序保持一致，便于导出后核对
 var CSV_HEADERS = [
   "接口名", "用户ID", "手机号", "结果", "处理阶段", "日期",
@@ -181,8 +205,21 @@ function generateCSV(records) {
   return lines.join("\r\n");
 }
 
-// 导出全量匹配记录（不分页，带行数上限保护）
-var MAX_EXPORT_ROWS = 100000;
+function csvLineForRecord(record) {
+  return CSV_FIELDS.map(function(col) {
+    return csvCell(col === "succ" ? succTextValue(record[col]) : record[col]);
+  }).join(",");
+}
+
+function estimateExportCsvBytes(records) {
+  var header = CSV_HEADERS.map(csvCell).join(",");
+  var bytes = Buffer.byteLength("\ufeff" + header + "\r\n", "utf8");
+  records.forEach(function(record) {
+    var line = csvLineForRecord(record);
+    bytes += Buffer.byteLength(line + "\r\n", "utf8");
+  });
+  return bytes;
+}
 
 router.get("/login-records/export", async function(req, res, next) {
   try {
@@ -198,6 +235,9 @@ router.get("/login-records/export", async function(req, res, next) {
       res.status(400).json({ error: "开始日期不能晚于结束日期" });
       return;
     }
+
+    var maxExportRows = getMaxExportRows();
+    var maxExportCsvBytes = getMaxExportCsvBytes();
 
     var isAsc = String(req.query.order || "").toLowerCase() === "asc";
     var databaseNames = db.names();
@@ -220,7 +260,7 @@ router.get("/login-records/export", async function(req, res, next) {
     }
     var found = tableInfos.filter(function(t) { return t.exists; });
 
-    logger.query.debug(
+    logger.export.debug(
       "[login-records/export] start: range=" + (startDate ? formatDate(startDate) : "-") + "~" + (endDate ? formatDate(endDate) : "-") +
       " indexFilter=" + (indexFilterPresent ? "yes" : "no") +
       " foundTables=" + found.length + " order=" + (isAsc ? "asc" : "desc")
@@ -240,10 +280,10 @@ router.get("/login-records/export", async function(req, res, next) {
 
       var dir = isAsc ? "ASC" : "DESC";
 
-      for (var di = 0; di < sortedDates.length && allRows.length < MAX_EXPORT_ROWS; di++) {
+      for (var di = 0; di < sortedDates.length && allRows.length < maxExportRows; di++) {
         var date = sortedDates[di];
         var pairs = dateGroups[date];
-        var limit = MAX_EXPORT_ROWS - allRows.length;
+        var limit = maxExportRows - allRows.length;
 
         var dbResults = await Promise.all(pairs.map(function(pair) {
           var sql = "SELECT " + selectColsStr + ", " + escapeStr(pair.table) + " AS source_table FROM " + escapeId(pair.table);
@@ -260,6 +300,14 @@ router.get("/login-records/export", async function(req, res, next) {
             });
             return resultRows;
           }).catch(function(err) {
+            logger.export.error(
+              "[login-records/export] fetch failed: db=" + pair.db +
+              " table=" + pair.table +
+              " date=" + date +
+              " order=" + dir +
+              " sql=" + sql +
+              " err=" + (err && err.message ? err.message : err)
+            );
             logger.error.error("[login-records/export] fetch failed: db=" + pair.db + " table=" + pair.table + " err=" + (err && err.message ? err.message : err));
             return [];
           });
@@ -269,22 +317,58 @@ router.get("/login-records/export", async function(req, res, next) {
       }
     }
 
-    var truncated = allRows.length >= MAX_EXPORT_ROWS;
-    if (truncated) allRows = allRows.slice(0, MAX_EXPORT_ROWS);
+    var truncated = allRows.length >= maxExportRows;
+    if (truncated) allRows = allRows.slice(0, maxExportRows);
 
-    var csv = generateCSV(allRows);
+    logger.export.debug("[login-records/export] materialized rows=" + allRows.length + " truncated=" + truncated + " candidateTables=" + found.length + " limitRows=" + maxExportRows);
+
+    var csvBytes = estimateExportCsvBytes(allRows);
     var fileStamp = startDate ? (formatDate(startDate) + "_" + (endDate ? formatDate(endDate) : "")) : "all";
     var filename = "trade_log_" + fileStamp + ".csv";
+
+    if (csvBytes > maxExportCsvBytes) {
+      logger.export.error(
+        "[login-records/export] oversized export rejected: url=" + req.originalUrl +
+        " rows=" + allRows.length +
+        " truncated=" + truncated +
+        " csvBytes=" + csvBytes +
+        " limitBytes=" + maxExportCsvBytes +
+        " filename=" + filename
+      );
+      res.status(413).json({
+        error: "导出结果过大（" + csvBytes + " bytes），请缩小日期范围或增加筛选条件后重试"
+      });
+      return;
+    }
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", 'attachment; filename="' + filename + '"');
     res.setHeader("X-Export-Rows", String(allRows.length));
     if (truncated) res.setHeader("X-Export-Truncated", "1");
     // BOM 头，确保 Excel 正确识别 UTF-8 中文
-    res.send("\ufeff" + csv);
+    res.write("\ufeff");
+    var headerLine = CSV_HEADERS.map(csvCell).join(",");
+    res.write(headerLine + "\r\n");
 
-    logger.query.debug("[login-records/export] done: rows=" + allRows.length + " truncated=" + truncated);
+    for (var i = 0; i < allRows.length; i += 1) {
+      var line = csvLineForRecord(allRows[i]);
+      res.write(line + "\r\n");
+    }
+    res.end();
+
+    logger.export.debug(
+      "[login-records/export] done: url=" + req.originalUrl +
+      " rows=" + allRows.length +
+      " truncated=" + truncated +
+      " csvBytes=" + csvBytes +
+      " filename=" + filename
+    );
   } catch (err) {
+    logger.export.error(
+      "[login-records/export] exception: url=" + req.originalUrl +
+      " query=" + JSON.stringify(req.query) +
+      " err=" + (err && err.stack ? err.stack : err)
+    );
     next(err);
   }
 });

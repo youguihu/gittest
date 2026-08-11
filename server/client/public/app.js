@@ -710,7 +710,12 @@ async function exportAllRecords() {
     try {
       const result = await response.json();
       msg = result.error || msg;
-    } catch (e) {}
+    } catch (e) {
+      try {
+        const text = await response.text();
+        if (text) msg = text;
+      } catch (e2) {}
+    }
     throw new Error(msg);
   }
   setExportStatus("文件生成完成，正在保存到本地…", "info");

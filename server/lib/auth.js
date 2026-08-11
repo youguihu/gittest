@@ -3,6 +3,7 @@
 var crypto = require("crypto");
 var fs = require("fs");
 var path = require("path");
+var logger = require("./logger");
 var userStore = require("./userStore");
 
 var sessionMaxAgeMs = 8 * 60 * 60 * 1000;
@@ -107,6 +108,16 @@ function attachUser(req, res, next) {
 
 function requireLogin(req, res, next) {
   if (!req.user) {
+    if (req.originalUrl && req.originalUrl.indexOf("/login-records/export") >= 0) {
+      logger.export.error(
+        "[auth] blocked export request: method=" + (req.method || "") +
+        " url=" + req.originalUrl +
+        " headers=" + JSON.stringify({
+          cookie: req.headers && req.headers.cookie ? "present" : "absent",
+          authorization: req.headers && req.headers.authorization ? "present" : "absent"
+        })
+      );
+    }
     res.status(401).json({ error: "请先登录" });
     return;
   }
