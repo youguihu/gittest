@@ -37,10 +37,23 @@ app.use(auth.attachUser);
 app.use("/api/auth", authRoutes);
 app.use("/api/meta", function(req, res) {
   var systemName = "交易日志";
+  var maxExportRows = 100000;
+
   if (global.CONFIG && global.CONFIG.server && global.CONFIG.server.systemName) {
     systemName = global.CONFIG.server.systemName;
   }
-  res.json({ systemName: systemName, dbQueryEnabled: dbQuery.dbQueryEnabled() });
+  if (global.CONFIG && global.CONFIG.tradeLog && global.CONFIG.tradeLog.maxExportRows) {
+    var parsed = parseInt(global.CONFIG.tradeLog.maxExportRows, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      maxExportRows = parsed;
+    }
+  }
+
+  res.json({
+    systemName: systemName,
+    dbQueryEnabled: dbQuery.dbQueryEnabled(),
+    maxExportRows: maxExportRows
+  });
 });
 app.use("/api", auth.requireLogin, loginRecords);
 app.use("/api", auth.requireLogin, users);

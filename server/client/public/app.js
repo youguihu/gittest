@@ -123,6 +123,12 @@ async function loadSystemName() {
     }
     dbQueryEnabled = Boolean(meta && meta.dbQueryEnabled);
     if (dbQueryTab) dbQueryTab.hidden = !dbQueryEnabled;
+
+    const exportAllHint = document.querySelector("#export-all-hint");
+    if (exportAllHint) {
+      const maxRows = meta && meta.maxExportRows != null ? Number(meta.maxExportRows) : 100000;
+      exportAllHint.textContent = `单次最多导出 ${Number.isFinite(maxRows) && maxRows > 0 ? maxRows : 100000} 条`;
+    }
   } catch (error) {
     // 加载失败时保留默认标题
   }
@@ -587,19 +593,35 @@ const exportTitle = document.querySelector("#export-title");
 const exportDesc = document.querySelector("#export-desc");
 
 const CSV_HEADERS = [
-  "接口名", "用户ID", "手机号", "结果", "处理阶段", "日期",
+  "接口名", "用户ID", "手机号", "结果", "处理阶段", "日期", "时间",
   "接口号", "耗时(ms)", "数据来源库", "数据来源表", "应用名", "日志级别",
   "毫秒时间", "进程ID", "线程ID", "模块名", "源码位置", "会话ID",
   "组号", "柜台标识", "柜台接口号", "数据信息", "IMEI", "版本",
   "OS版本", "IMSI", "MAC", "UDID", "IP", "设备ID", "记录ID"
 ];
 const CSV_FIELDS = [
-  "name", "user_id", "mobile_no", "succ", "processing_stage", "log_date",
+  "name", "user_id", "mobile_no", "succ", "processing_stage", "log_date", "log_date_time",
   "req_uri", "time_consuming", "source_db", "source_table", "application_name", "log_lvl",
   "log_date_ms", "process_id", "thread_id", "module_name", "src_location", "session_id",
   "process_number", "backend_id", "backend_process_id", "data_info", "imei", "version",
   "os_version", "imsi", "mac", "udid", "ip", "mach_id", "id"
 ];
+
+function formatLogDateValue(value) {
+  if (value == null || value === "") return "";
+  const s = String(value);
+  return s.length >= 10 ? s.substring(0, 10) : s;
+}
+
+function formatLogTimeValue(value) {
+  if (value == null || value === "") return "";
+  const s = String(value);
+  let timePart = s;
+  if (s.length >= 19 && s[10] === " ") {
+    timePart = s.substring(11, 19);
+  }
+  return /^\d{2}:\d{2}:\d{2}$/.test(timePart) ? timePart : s;
+}
 
 function csvEscape(value) {
   if (value == null) return "";
@@ -615,7 +637,10 @@ function buildCsv(records) {
   const lines = [CSV_HEADERS.map(csvEscape).join(",")];
   records.forEach((record) => {
     lines.push(CSV_FIELDS.map((col) => {
-      const v = col === "succ" ? succText(record[col]) : record[col];
+      const v = col === "succ" ? succText(record[col]) :
+        col === "log_date" ? formatLogDateValue(record[col]) :
+        col === "log_date_time" ? formatLogTimeValue(record.log_date) :
+        record[col];
       return csvEscape(v);
     }).join(","));
   });

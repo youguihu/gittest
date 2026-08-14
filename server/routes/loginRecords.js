@@ -159,9 +159,9 @@ function getMaxExportCsvBytes() {
   return bytes;
 }
 
-// 与详情弹窗字段顺序保持一致，便于导出后核对
+// 让日期和时间分离，保留原始 log_date 作为日期部分，并新增单独的时间列
 var CSV_HEADERS = [
-  "接口名", "用户ID", "手机号", "结果", "处理阶段", "日期",
+  "接口名", "用户ID", "手机号", "结果", "处理阶段", "日期", "时间",
   "接口号", "耗时(ms)", "数据来源库", "数据来源表", "应用名", "日志级别",
   "毫秒时间", "进程ID", "线程ID", "模块名", "源码位置", "会话ID",
   "组号", "柜台标识", "柜台接口号", "数据信息", "IMEI", "版本",
@@ -169,7 +169,7 @@ var CSV_HEADERS = [
 ];
 
 var CSV_FIELDS = [
-  "name", "user_id", "mobile_no", "succ", "processing_stage", "log_date",
+  "name", "user_id", "mobile_no", "succ", "processing_stage", "log_date", "log_date_time",
   "req_uri", "time_consuming", "source_db", "source_table", "application_name", "log_lvl",
   "log_date_ms", "process_id", "thread_id", "module_name", "src_location", "session_id",
   "process_number", "backend_id", "backend_process_id", "data_info", "imei", "version",
@@ -180,6 +180,25 @@ function succTextValue(value) {
   if (value === 1) return "成功";
   if (value === 0) return "失败";
   return "未知";
+}
+
+function formatLogDateValue(value) {
+  if (value == null || value === "") return "";
+  var s = String(value);
+  return s.length >= 10 ? s.substring(0, 10) : s;
+}
+
+function formatLogTimeValue(value) {
+  if (value == null || value === "") return "";
+  var s = String(value);
+  var timePart = s;
+  if (s.length >= 19 && s.charAt(10) === " ") {
+    timePart = s.substring(11, 19);
+  }
+  if (/^\d{2}:\d{2}:\d{2}$/.test(timePart)) {
+    return timePart;
+  }
+  return s;
 }
 
 function csvCell(value) {
@@ -199,7 +218,11 @@ function generateCSV(records) {
   var lines = [CSV_HEADERS.map(csvCell).join(",")];
   records.forEach(function(record) {
     lines.push(CSV_FIELDS.map(function(col) {
-      return csvCell(col === "succ" ? succTextValue(record[col]) : record[col]);
+      var value = col === "succ" ? succTextValue(record[col]) :
+        col === "log_date" ? formatLogDateValue(record[col]) :
+        col === "log_date_time" ? formatLogTimeValue(record.log_date) :
+        record[col];
+      return csvCell(value);
     }).join(","));
   });
   return lines.join("\r\n");
@@ -207,7 +230,11 @@ function generateCSV(records) {
 
 function csvLineForRecord(record) {
   return CSV_FIELDS.map(function(col) {
-    return csvCell(col === "succ" ? succTextValue(record[col]) : record[col]);
+    var value = col === "succ" ? succTextValue(record[col]) :
+      col === "log_date" ? formatLogDateValue(record[col]) :
+      col === "log_date_time" ? formatLogTimeValue(record.log_date) :
+      record[col];
+    return csvCell(value);
   }).join(",");
 }
 
