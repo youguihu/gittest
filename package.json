@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "description": "交易日志查询服务：多库分表查询柜台登录记录，含前端查询界面与后端 API。",
   "scripts": {
+    "build:assets": "node ./scripts/sync-frontend.js",
+    "prestart": "npm run build:assets",
     "start": "node ./bin/www",
+    "predev": "npm run build:assets",
     "dev": "node --watch ./bin/www",
     "seed": "node ./server/scripts/seed-trade-log.js"
   },

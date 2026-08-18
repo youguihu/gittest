@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>系统登录</title>
+    <script>
+      (function () {
+        var p = location.pathname;
+        var base = p.endsWith("/") ? p : p.slice(0, p.lastIndexOf("/") + 1);
+        document.write('<base href="' + base + '" />');
+      })();
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="login-page">
+    <canvas id="login-canvas" class="login-canvas" aria-hidden="true"></canvas>
+    <div class="login-blobs" aria-hidden="true">
+      <span class="blob blob-1"></span>
+      <span class="blob blob-2"></span>
+      <span class="blob blob-3"></span>
+      <span class="blob blob-4"></span>
+    </div>
+    <main class="shell login-shell">
+      <form id="login-form" class="login-panel">
+        <h1>系统登录</h1>
+        <label>
+          用户名
+          <input name="username" required autocomplete="username" placeholder="请输入用户名" autofocus />
+        </label>
+        <label>
+          密码
+          <input name="password" required type="password" autocomplete="current-password" placeholder="请输入密码" />
+        </label>
+        <button type="submit">登录</button>
+        <p id="login-message" class="message" aria-live="polite"></p>
+      </form>
+    </main>
+
+    <div id="error-modal" class="modal" hidden role="alertdialog" aria-modal="true" aria-labelledby="error-title">
+      <div class="modal-panel">
+        <h2 id="error-title">提示</h2>
+        <p id="error-text"></p>
+        <button id="error-close" type="button">知道了</button>
+      </div>
+    </div>
+
+    <script src="canvas-particles.js" defer></script>
+    <script src="login.js" type="module"></script>
+  </body>
+</html>

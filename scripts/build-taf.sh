@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# TAF 节点部署仅发布 bin + server 顶层目录，前端静态资源打包时合成进 server/client/public
+node scripts/sync-frontend.js
+
 for f in bin/www package.json server/app.js server/TradeLogQueryServer.conf server/client/public/index.html; do
   if [ ! -f "$f" ]; then
     echo "缺少必需文件: $f" >&2

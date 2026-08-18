@@ -5,6 +5,9 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
+# TAF 节点部署仅发布 bin + server 顶层目录，前端静态资源打包时合成进 server/client/public
+node scripts\sync-frontend.js
+
 $required = @(
     "bin\www",
     "package.json",
